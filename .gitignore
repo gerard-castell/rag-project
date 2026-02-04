@@ -1,0 +1,7 @@
+.env
+__pycache__/
+data/
+models_cache/
+qdrant_storage/
+.venv
+temp_uploads/
