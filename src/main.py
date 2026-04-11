@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src.api.dependencies import get_embedder
-from src.api.routes import health, ingest, search
+from src.api.routes import chat, health, ingest, search
 from src.core.exceptions import RAGError
 from src.core.logger import logger
 
@@ -57,6 +57,7 @@ async def general_error_handler(request: Request, exc: Exception) -> JSONRespons
 app.include_router(health.router, tags=["Health"])
 app.include_router(ingest.router, tags=["Ingestion"])
 app.include_router(search.router, tags=["Search"])
+app.include_router(chat.router, tags=["Chat"])
 
 
 if __name__ == "__main__":
