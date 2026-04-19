@@ -73,9 +73,14 @@ disallow_untyped_decorators = false
 
 strict_equality = true
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "respx>=0.23.1",
 ]
