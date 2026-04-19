@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from src.api.dependencies import get_embedder
+from src.api.dependencies import get_vram_scheduler
 from src.api.routes import chat, health, ingest, search
 from src.core.exceptions import RAGError
 from src.core.logger import logger
@@ -15,16 +15,12 @@ from src.core.logger import logger
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifecycle manager for the FastAPI application."""
-    logger.info("🚀 Starting RAG API: Pre-loading models to GPU...")
-    try:
-        get_embedder()
-        logger.info("✅ Models loaded successfully.")
-    except Exception as e:
-        logger.error(f"❌ Failed to load models during startup: {e}")
-
+    scheduler = get_vram_scheduler()
+    await scheduler.start()
+    logger.info("Starting RAG API. Embedding models load on demand.")
     yield
-
-    logger.info("🛑 Shutting down RAG API...")
+    logger.info("Shutting down RAG API...")
+    await scheduler.stop()
 
 
 app = FastAPI(

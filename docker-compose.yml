@@ -9,4 +9,51 @@ services:
       - ./qdrant_storage:/qdrant/storage:z
     restart: unless-stopped
     environment:
-      - QDRANT__SERVICE__ENABLE_STATIC_CONTENT=1 
+      - QDRANT__SERVICE__ENABLE_STATIC_CONTENT=1
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    container_name: llama-cpp-gpu
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+    # -m: model path  -ngl 99: offload all layers to GPU  --ctx-size: context window
+    command: ["--server", "-m", "/models/gemma-4-E4B-it-Q4_K_M.gguf", "--host", "0.0.0.0", "--port", "8080", "-ngl", "99", "--ctx-size", "4096"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - LLAMA_CPP_URL=http://llama-cpp:8080
+    volumes:
+      - ./models_cache:/app/models_cache
+      - ./temp_uploads:/app/temp_uploads
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - qdrant
+      - llama-cpp
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped

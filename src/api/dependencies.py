@@ -34,7 +34,11 @@ def get_llama_client() -> LlamaCppClient:
 @lru_cache
 def get_vram_scheduler() -> VRAMScheduler:
     """Singleton-like dependency for VRAMScheduler."""
-    return VRAMScheduler()
+    return VRAMScheduler(
+        container_name=settings.llama_container_name,
+        llama_cpp_url=settings.llama_cpp_url,
+        idle_timeout_seconds=settings.llama_idle_timeout_seconds,
+    )
 
 
 EmbedderDep = Annotated[LocalEmbedder, Depends(get_embedder)]
