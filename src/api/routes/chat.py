@@ -1,10 +1,10 @@
-"""Chat endpoint backed by Ollama with RAG context."""
+"""Chat endpoint backed by llama.cpp with RAG context."""
 
 from fastapi import APIRouter, HTTPException
 
 from src.api.dependencies import (
     EmbedderDep,
-    OllamaClientDep,
+    LlamaCppClientDep,
     VectorDBDep,
     VRAMSchedulerDep,
 )
@@ -20,12 +20,12 @@ async def chat_endpoint(
     embedder: EmbedderDep,
     db: VectorDBDep,
     vram_scheduler: VRAMSchedulerDep,
-    ollama_client: OllamaClientDep,
+    llama_client: LlamaCppClientDep,
 ) -> ChatResponse:
-    """Hybrid search and rerank to generate response via Ollama."""
+    """Hybrid search and rerank, then generate response via llama.cpp."""
     try:
         return await generate_chat_response(
-            request, embedder, db, vram_scheduler, ollama_client
+            request, embedder, db, vram_scheduler, llama_client
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

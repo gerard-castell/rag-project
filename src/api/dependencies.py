@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import Depends
 from qdrant_client import QdrantClient
 
-from src.core.ollama_client import OllamaClient
+from src.core.llama_cpp_client import LlamaCppClient
 from src.core.settings import settings
 from src.core.vram_scheduler import VRAMScheduler
 from src.ingestion.database import VectorDB
@@ -26,19 +26,19 @@ def get_vector_db() -> VectorDB:
 
 
 @lru_cache
-def get_ollama_client() -> OllamaClient:
-    """Singleton-like dependency for OllamaClient."""
-    return OllamaClient(base_url=settings.ollama_url)
+def get_llama_client() -> LlamaCppClient:
+    """Singleton-like dependency for LlamaCppClient."""
+    return LlamaCppClient(base_url=settings.llama_cpp_url)
 
 
 @lru_cache
 def get_vram_scheduler() -> VRAMScheduler:
     """Singleton-like dependency for VRAMScheduler."""
-    return VRAMScheduler(ollama_client=get_ollama_client())
+    return VRAMScheduler()
 
 
 EmbedderDep = Annotated[LocalEmbedder, Depends(get_embedder)]
 VectorDBDep = Annotated[VectorDB, Depends(get_vector_db)]
 QdrantClientDep = Annotated[QdrantClient, Depends(lambda: get_vector_db().client)]
-OllamaClientDep = Annotated[OllamaClient, Depends(get_ollama_client)]
+LlamaCppClientDep = Annotated[LlamaCppClient, Depends(get_llama_client)]
 VRAMSchedulerDep = Annotated[VRAMScheduler, Depends(get_vram_scheduler)]
