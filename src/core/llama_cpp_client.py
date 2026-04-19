@@ -16,7 +16,7 @@ class LlamaCppClient:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
                 resp = await client.get(f"{self._base_url}/health")
-                return resp.status_code == 200
+                return bool(resp.status_code == 200)
         except httpx.RequestError:
             return False
 
