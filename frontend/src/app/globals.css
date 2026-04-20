@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  /* Papyr backgrounds */
+  --color-bg: oklch(97% 0.012 78);
+  --color-bg-subtle: oklch(94% 0.012 78);
+  --color-bg-inset: oklch(91% 0.014 78);
+
+  /* Papyr surfaces */
+  --color-surface: oklch(100% 0 0);
+  --color-surface-raised: oklch(99% 0.005 78);
+
+  /* Papyr ink (text) */
+  --color-ink: oklch(18% 0.02 260);
+  --color-ink-muted: oklch(52% 0.022 260);
+  --color-ink-subtle: oklch(68% 0.018 260);
+
+  /* Papyr accent (teal) */
+  --color-accent: oklch(54% 0.17 192);
+  --color-accent-dark: oklch(44% 0.18 190);
+  --color-accent-soft: oklch(94% 0.05 190);
+
+  /* Papyr amber */
+  --color-amber: oklch(68% 0.18 68);
+  --color-amber-dark: oklch(56% 0.20 62);
+  --color-amber-soft: oklch(95% 0.06 78);
+
+  /* Borders (using "rim" prefix to avoid Tailwind class conflicts) */
+  --color-rim: oklch(88% 0.014 78);
+  --color-rim-strong: oklch(75% 0.020 78);
+
+  /* Semantic */
+  --color-success: oklch(58% 0.16 155);
+  --color-success-soft: oklch(94% 0.06 155);
+  --color-warning: oklch(72% 0.18 88);
+  --color-warning-soft: oklch(95% 0.06 88);
+  --color-danger: oklch(58% 0.22 25);
+  --color-danger-soft: oklch(95% 0.06 25);
+
+  /* Fonts */
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-serif: var(--font-sora), Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+
+  /* Animations */
+  --animate-fade-up: fadeUp 180ms ease-out both;
+  --animate-bounce-dot: bounceDot 1.2s ease-in-out infinite;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounceDot {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(82% 0.014 78) transparent;
+}

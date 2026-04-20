@@ -5,3 +5,13 @@ models_cache/
 qdrant_storage/
 .venv
 temp_uploads/
+ollama_data/
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+frontend/.env*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
