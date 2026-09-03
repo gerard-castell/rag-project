@@ -21,11 +21,8 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     ignore:
-      # Stay on Python 3.12 (current stable); only patch updates within 3.12.x are proposed.
       - dependency-name: "python"
         versions: [">=3.13"]
-      # Stay on the current Node.js LTS major (24); odd majors aren't LTS, so
-      # bump this manually when the next even-numbered LTS release ships.
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
 
