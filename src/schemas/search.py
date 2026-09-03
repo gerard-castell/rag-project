@@ -10,6 +10,7 @@ class SearchRequest(BaseModel):
 
     query: str
     limit: int = Field(default=5, ge=1, le=50)
+    doc_id: str | None = None
 
 
 class SearchResponse(BaseModel):

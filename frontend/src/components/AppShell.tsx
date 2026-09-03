@@ -1,26 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { health } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { deleteDocument, health, listDocuments, type Doc } from "@/lib/api";
 import Sidebar from "./Sidebar";
 import DocumentsView from "./DocumentsView";
 import SearchView from "./SearchPanel";
 import ChatView from "./ChatPanel";
 
-export interface Doc {
-  id: string;
-  name: string;
-  uploadedAt: Date;
-}
+export type { Doc };
 
 type ActiveView = "documents" | "search" | "chat";
 
 export default function AppShell() {
   const [activeView, setActiveView] = useState<ActiveView>("documents");
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [healthOk, setHealthOk] = useState(false);
+
+  const refreshDocs = useCallback(() => {
+    listDocuments()
+      .then((fetched) => setDocs(fetched))
+      .catch(() => {
+        // Keep the previously loaded list if the backend is unreachable.
+      });
+  }, []);
 
   useEffect(() => {
     health()
@@ -28,12 +33,24 @@ export default function AppShell() {
       .catch(() => setHealthOk(false));
   }, []);
 
-  const addDoc = (name: string, taskId: string) => {
-    setDocs((prev) => [
-      ...prev,
-      { id: taskId, name, uploadedAt: new Date() },
-    ]);
+  useEffect(() => {
+    refreshDocs();
+  }, [refreshDocs]);
+
+  const handleUploadSuccess = () => {
+    // Ingestion runs as a background task, so the new document may not be
+    // aggregated from Qdrant yet; refresh now and once more shortly after.
+    refreshDocs();
+    setTimeout(refreshDocs, 3000);
   };
+
+  const handleDeleteDoc = async (docId: string) => {
+    await deleteDocument(docId);
+    setDocs((prev) => prev.filter((doc) => doc.doc_id !== docId));
+    setActiveDocId((prev) => (prev === docId ? null : prev));
+  };
+
+  const activeDoc = docs.find((doc) => doc.doc_id === activeDocId) ?? null;
 
   return (
     <div className="flex h-full w-full bg-bg">
@@ -49,16 +66,29 @@ export default function AppShell() {
         {activeView === "documents" && (
           <DocumentsView
             docs={docs}
+            activeDocId={activeDocId}
             uploadOpen={uploadOpen}
             onUploadOpen={() => setUploadOpen(true)}
             onUploadClose={() => setUploadOpen(false)}
-            onAddDoc={addDoc}
+            onUploadSuccess={handleUploadSuccess}
+            onSelectDoc={(docId) =>
+              setActiveDocId((prev) => (prev === docId ? null : docId))
+            }
+            onDeleteDoc={handleDeleteDoc}
           />
         )}
 
-        {activeView === "search" && <SearchView />}
+        {activeView === "search" && <SearchView activeDoc={activeDoc} />}
 
-        {activeView === "chat" && <ChatView healthOk={healthOk} />}
+        {activeView === "chat" && (
+          // Remount on doc switch so an earlier answer grounded in a
+          // different document is never mistaken for this one.
+          <ChatView
+            key={activeDocId ?? "all"}
+            healthOk={healthOk}
+            activeDoc={activeDoc}
+          />
+        )}
       </main>
     </div>
   );

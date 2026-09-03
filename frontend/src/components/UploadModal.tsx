@@ -7,7 +7,7 @@ import { ingestPDF } from "@/lib/api";
 interface UploadModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (name: string, taskId: string) => void;
+  onSuccess: () => void;
 }
 
 export default function UploadModal({
@@ -62,8 +62,8 @@ export default function UploadModal({
 
     try {
       const file = files[0]; // Upload first file for simplicity
-      const response = await ingestPDF(file);
-      onSuccess(file.name, response.task_id);
+      await ingestPDF(file);
+      onSuccess();
       setFiles([]);
       onClose();
     } catch (err) {

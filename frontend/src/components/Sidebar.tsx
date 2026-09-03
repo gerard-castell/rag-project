@@ -71,12 +71,12 @@ export default function Sidebar({
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {docs.slice(0, 4).map((doc) => (
               <div
-                key={doc.id}
+                key={doc.doc_id}
                 className="px-2 py-1 text-xs text-ink-muted truncate hover:text-ink cursor-pointer transition-colors"
-                title={doc.name}
+                title={doc.source}
               >
                 <FileText className="w-3 h-3 inline mr-1 text-amber" />
-                {doc.name}
+                {doc.source}
               </div>
             ))}
           </div>

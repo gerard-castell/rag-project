@@ -15,3 +15,7 @@ class EmbeddingGenerationError(RAGError):
 
 class VectorDBError(RAGError):
     """Raised when vector database operations fail."""
+
+
+class DocumentNotFoundError(RAGError):
+    """Raised when a requested document does not exist."""
