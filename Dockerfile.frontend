@@ -12,6 +12,12 @@ RUN npm ci
 # Copy source
 COPY frontend .
 
+# next.config.ts resolves BACKEND_URL for rewrites() at build time, since
+# Next.js bakes the rewrite destination into routes-manifest.json — a
+# runtime-only env var on the production stage has no effect.
+ARG BACKEND_URL=http://api:8000
+ENV BACKEND_URL=$BACKEND_URL
+
 # Build
 RUN npm run build
 
@@ -20,8 +26,10 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+ARG BACKEND_URL=http://api:8000
+
 ENV NODE_ENV=production
-ENV BACKEND_URL=http://backend:8000
+ENV BACKEND_URL=$BACKEND_URL
 ENV NEXT_PUBLIC_API_URL=""
 
 # Copy built app from builder

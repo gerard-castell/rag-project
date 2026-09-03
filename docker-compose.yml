@@ -62,6 +62,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        - BACKEND_URL=http://api:8000
     container_name: rag-frontend
     ports:
       - "3000:3000"
