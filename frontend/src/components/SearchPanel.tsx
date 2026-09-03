@@ -3,8 +3,13 @@
 import { useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { search, SearchResult } from "@/lib/api";
+import { Doc } from "./AppShell";
 
-export default function SearchPanel() {
+interface SearchPanelProps {
+  activeDoc: Doc | null;
+}
+
+export default function SearchPanel({ activeDoc }: SearchPanelProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -17,7 +22,7 @@ export default function SearchPanel() {
     setError(null);
 
     try {
-      const data = await search(query);
+      const data = await search(query, 5, activeDoc?.doc_id);
       setResults(data);
     } catch (err) {
       setError(
@@ -34,6 +39,9 @@ export default function SearchPanel() {
       {/* Header */}
       <div className="px-8 py-6 border-b border-rim bg-surface">
         <h1 className="text-2xl font-serif font-bold text-ink">Search</h1>
+        <p className="text-sm text-ink-subtle mt-1">
+          {activeDoc ? `Scoped to: ${activeDoc.source}` : "Searching all documents"}
+        </p>
       </div>
 
       {/* Content */}

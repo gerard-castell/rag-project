@@ -42,7 +42,13 @@ def test_search_returns_200_with_stubbed_embedder(client: Any) -> None:
         {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
     ]
 
-    stub_metadata = {"source": "report.pdf", "page": 1, "doc_id": "task-1"}
+    stub_metadata = {
+        "source": "report.pdf",
+        "page": 1,
+        "doc_id": "task-1",
+        "page_count": 3,
+        "ingested_at": "2026-01-01T00:00:00+00:00",
+    }
     stub_point = MagicMock()
     stub_point.payload = {"text": "hello world", "metadata": stub_metadata}
     stub_point.score = 0.9
@@ -72,6 +78,72 @@ def test_ingest_validation(client: Any) -> None:
     )
     assert response.status_code == 400
     assert "Only PDF files are supported." in response.json()["detail"]
+
+
+def test_list_documents_aggregates_chunks_by_doc_id(client: Any) -> None:
+    """Verifies that /documents groups chunk points into per-document summaries."""
+    points = [
+        MagicMock(
+            payload={
+                "text": "a",
+                "metadata": {
+                    "source": "report.pdf",
+                    "page": 1,
+                    "doc_id": "doc-1",
+                    "page_count": 2,
+                    "ingested_at": "2026-01-01T00:00:00+00:00",
+                },
+            }
+        ),
+        MagicMock(
+            payload={
+                "text": "b",
+                "metadata": {
+                    "source": "report.pdf",
+                    "page": 2,
+                    "doc_id": "doc-1",
+                    "page_count": 2,
+                    "ingested_at": "2026-01-01T00:00:00+00:00",
+                },
+            }
+        ),
+    ]
+    stub_db = MagicMock()
+    stub_db.client.collection_exists.return_value = True
+    stub_db.client.scroll.return_value = (points, None)
+
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    try:
+        response = client.get("/documents")
+    finally:
+        app.dependency_overrides.pop(get_vector_db, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == [
+        {
+            "doc_id": "doc-1",
+            "source": "report.pdf",
+            "page_count": 2,
+            "ingested_at": "2026-01-01T00:00:00+00:00",
+            "chunk_count": 2,
+        }
+    ]
+
+
+def test_delete_document_not_found_returns_404(client: Any) -> None:
+    """Verifies that deleting an unknown doc_id returns 404."""
+    stub_db = MagicMock()
+    stub_db.client.collection_exists.return_value = True
+    stub_db.client.scroll.return_value = ([], None)
+
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    try:
+        response = client.delete("/documents/missing-doc")
+    finally:
+        app.dependency_overrides.pop(get_vector_db, None)
+
+    assert response.status_code == 404
 
 
 def test_chat_returns_503_when_model_is_warming_up(client: Any) -> None:

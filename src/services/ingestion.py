@@ -3,6 +3,7 @@
 import gc
 import os
 import uuid
+from datetime import UTC, datetime
 
 import torch
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -16,7 +17,7 @@ from src.schemas.ingestion import TaskStatus
 from src.schemas.metadata import ChunkMetadata
 
 
-def run_ingestion_logic(file_path: str, task_id: str) -> None:
+def run_ingestion_logic(file_path: str, task_id: str, original_filename: str) -> None:
     """Run the ingestion pipeline for a given file."""
     from src.api.dependencies import (
         get_embedder,
@@ -46,6 +47,8 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
             raise DocumentParsingError(f"Failed to parse document: {e}") from e
 
         logger.info(f"[Task {task_id}] Splitting documents into chunks...")
+        page_count = len(docs)
+        ingested_at = datetime.now(UTC).isoformat()
         all_chunks: list[str] = []
         chunk_metadatas: list[ChunkMetadata] = []
 
@@ -58,9 +61,11 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
                 all_chunks.append(chunk)
                 chunk_metadatas.append(
                     ChunkMetadata(
-                        source=os.path.basename(file_path),
+                        source=original_filename,
                         page=doc.metadata.get("page", 0),
                         doc_id=task_id,
+                        page_count=page_count,
+                        ingested_at=ingested_at,
                     )
                 )
 

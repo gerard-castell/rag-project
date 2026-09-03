@@ -9,3 +9,5 @@ class ChunkMetadata(BaseModel):
     source: str
     page: int
     doc_id: str
+    page_count: int
+    ingested_at: str

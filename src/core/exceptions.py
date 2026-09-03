@@ -17,6 +17,10 @@ class VectorDBError(RAGError):
     """Raised when vector database operations fail."""
 
 
+class DocumentNotFoundError(RAGError):
+    """Raised when a requested document does not exist."""
+
+
 class ContainerUnavailableError(RAGError):
     """Raised when the llama.cpp Docker container cannot be found."""
 

@@ -38,6 +38,14 @@ export interface HealthResponse {
   device: string;
 }
 
+export interface Doc {
+  doc_id: string;
+  source: string;
+  page_count: number;
+  ingested_at: string;
+  chunk_count: number;
+}
+
 export class ModelWarmingUpError extends Error {}
 
 export async function ingestPDF(file: File): Promise<IngestResponse> {
@@ -64,12 +72,13 @@ export async function getIngestStatus(
 
 export async function search(
   query: string,
-  limit = 5
+  limit = 5,
+  docId?: string | null
 ): Promise<SearchResult[]> {
   const res = await fetch(`${BASE}/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, limit }),
+    body: JSON.stringify({ query, limit, doc_id: docId ?? null }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -78,11 +87,19 @@ export async function search(
   return res.json() as Promise<SearchResult[]>;
 }
 
-export async function chat(message: string): Promise<ChatResponse> {
+export async function chat(
+  message: string,
+  docId?: string | null
+): Promise<ChatResponse> {
   const res = await fetch(`${BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, max_tokens: 512, temperature: 0.7 }),
+    body: JSON.stringify({
+      message,
+      max_tokens: 512,
+      temperature: 0.7,
+      doc_id: docId ?? null,
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -100,4 +117,20 @@ export async function health(): Promise<HealthResponse> {
   const res = await fetch(`${BASE}/health`);
   if (!res.ok) throw new Error(res.statusText);
   return res.json() as Promise<HealthResponse>;
+}
+
+export async function listDocuments(): Promise<Doc[]> {
+  const res = await fetch(`${BASE}/documents`);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json() as Promise<Doc[]>;
+}
+
+export async function deleteDocument(docId: string): Promise<void> {
+  const res = await fetch(`${BASE}/documents/${encodeURIComponent(docId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text || res.statusText);
+  }
 }

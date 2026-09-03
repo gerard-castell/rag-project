@@ -25,7 +25,9 @@ async def generate_chat_response(
 ) -> ChatResponse:
     """Retrieve relevant context, then generate a grounded response via llama.cpp."""
     search_request = SearchRequest(
-        query=request.message, limit=settings.default_search_limit
+        query=request.message,
+        limit=settings.default_search_limit,
+        doc_id=request.doc_id,
     )
 
     results = await perform_hybrid_search(search_request, embedder, db, vram_scheduler)

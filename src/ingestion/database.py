@@ -27,6 +27,11 @@ class VectorDB:
                         )
                     },
                 )
+            self.client.create_payload_index(
+                collection_name=name,
+                field_name="metadata.doc_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
         except Exception as e:
             raise VectorDBError(f"Failed to setup collection {name}: {e}") from e
 
@@ -37,4 +42,16 @@ class VectorDB:
         except Exception as e:
             raise VectorDBError(
                 f"Failed to upsert points to {collection_name}: {e}"
+            ) from e
+
+    def delete_points(self, collection_name: str, points_filter: models.Filter) -> None:
+        """Delete all points matching a filter from the specified collection."""
+        try:
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=models.FilterSelector(filter=points_filter),
+            )
+        except Exception as e:
+            raise VectorDBError(
+                f"Failed to delete points from {collection_name}: {e}"
             ) from e

@@ -42,7 +42,9 @@ async def ingest_endpoint(
         raise HTTPException(status_code=500, detail=f"Error writing file: {e}") from e
 
     task_store.create(task_id)
-    background_tasks.add_task(run_ingestion_logic, str(file_path), task_id)
+    background_tasks.add_task(
+        run_ingestion_logic, str(file_path), task_id, file.filename
+    )
 
     return {
         "status": "queued",

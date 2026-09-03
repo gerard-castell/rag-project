@@ -26,8 +26,21 @@ async def perform_hybrid_search(
 
     prefetch_limit = request.limit * settings.prefetch_multiplier
 
+    doc_filter = None
+    if request.doc_id:
+        doc_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.doc_id", match=models.MatchValue(value=request.doc_id)
+                )
+            ]
+        )
+
     prefetch_dense = models.Prefetch(
-        query=vector_data["dense"], using="dense-bge", limit=prefetch_limit
+        query=vector_data["dense"],
+        using="dense-bge",
+        limit=prefetch_limit,
+        filter=doc_filter,
     )
 
     prefetch_sparse = models.Prefetch(
@@ -36,6 +49,7 @@ async def perform_hybrid_search(
         ),
         using="sparse-splade",
         limit=prefetch_limit,
+        filter=doc_filter,
     )
 
     try:

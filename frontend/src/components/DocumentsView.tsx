@@ -5,18 +5,24 @@ import UploadModal from "./UploadModal";
 
 interface DocumentsViewProps {
   docs: Doc[];
+  activeDocId: string | null;
   uploadOpen: boolean;
   onUploadOpen: () => void;
   onUploadClose: () => void;
-  onAddDoc: (name: string, taskId: string) => void;
+  onUploadSuccess: () => void;
+  onSelectDoc: (docId: string) => void;
+  onDeleteDoc: (docId: string) => void;
 }
 
 export default function DocumentsView({
   docs,
+  activeDocId,
   uploadOpen,
   onUploadOpen,
   onUploadClose,
-  onAddDoc,
+  onUploadSuccess,
+  onSelectDoc,
+  onDeleteDoc,
 }: DocumentsViewProps) {
   return (
     <>
@@ -53,13 +59,23 @@ export default function DocumentsView({
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
             {docs.map((doc) => (
-              <DocumentCard key={doc.id} doc={doc} />
+              <DocumentCard
+                key={doc.doc_id}
+                doc={doc}
+                active={doc.doc_id === activeDocId}
+                onSelect={() => onSelectDoc(doc.doc_id)}
+                onDelete={() => onDeleteDoc(doc.doc_id)}
+              />
             ))}
           </div>
         )}
       </div>
 
-      <UploadModal open={uploadOpen} onClose={onUploadClose} onSuccess={onAddDoc} />
+      <UploadModal
+        open={uploadOpen}
+        onClose={onUploadClose}
+        onSuccess={onUploadSuccess}
+      />
     </>
   );
 }

@@ -1,33 +1,31 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { getIngestStatus, health } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { deleteDocument, health, listDocuments, type Doc } from "@/lib/api";
 import Sidebar from "./Sidebar";
 import DocumentsView from "./DocumentsView";
 import SearchView from "./SearchPanel";
 import ChatView from "./ChatPanel";
 
-export type DocStatus = "processing" | "indexed" | "error";
-
-export interface Doc {
-  id: string;
-  name: string;
-  uploadedAt: Date;
-  status: DocStatus;
-  error?: string;
-}
+export type { Doc };
 
 type ActiveView = "documents" | "search" | "chat";
-
-const POLL_INTERVAL_MS = 2000;
 
 export default function AppShell() {
   const [activeView, setActiveView] = useState<ActiveView>("documents");
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [healthOk, setHealthOk] = useState(false);
-  const pollingIds = useRef(new Set<string>());
+
+  const refreshDocs = useCallback(() => {
+    listDocuments()
+      .then((fetched) => setDocs(fetched))
+      .catch(() => {
+        // Keep the previously loaded list if the backend is unreachable.
+      });
+  }, []);
 
   useEffect(() => {
     health()
@@ -36,51 +34,23 @@ export default function AppShell() {
   }, []);
 
   useEffect(() => {
-    const processingDocs = docs.filter((doc) => doc.status === "processing");
-    if (processingDocs.length === 0) return;
+    refreshDocs();
+  }, [refreshDocs]);
 
-    const interval = setInterval(async () => {
-      for (const doc of processingDocs) {
-        if (pollingIds.current.has(doc.id)) continue;
-        pollingIds.current.add(doc.id);
-        try {
-          const record = await getIngestStatus(doc.id);
-          if (record.status === "done") {
-            setDocs((prev) =>
-              prev.map((d) =>
-                d.id === doc.id ? { ...d, status: "indexed" } : d
-              )
-            );
-          } else if (record.status === "failed") {
-            setDocs((prev) =>
-              prev.map((d) =>
-                d.id === doc.id
-                  ? {
-                      ...d,
-                      status: "error",
-                      error: record.error ?? "Ingestion failed.",
-                    }
-                  : d
-              )
-            );
-          }
-        } catch {
-          // Transient poll failure; retry on the next tick.
-        } finally {
-          pollingIds.current.delete(doc.id);
-        }
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [docs]);
-
-  const addDoc = (name: string, taskId: string) => {
-    setDocs((prev) => [
-      ...prev,
-      { id: taskId, name, uploadedAt: new Date(), status: "processing" },
-    ]);
+  const handleUploadSuccess = () => {
+    // Ingestion runs as a background task, so the new document may not be
+    // aggregated from Qdrant yet; refresh now and once more shortly after.
+    refreshDocs();
+    setTimeout(refreshDocs, 3000);
   };
+
+  const handleDeleteDoc = async (docId: string) => {
+    await deleteDocument(docId);
+    setDocs((prev) => prev.filter((doc) => doc.doc_id !== docId));
+    setActiveDocId((prev) => (prev === docId ? null : prev));
+  };
+
+  const activeDoc = docs.find((doc) => doc.doc_id === activeDocId) ?? null;
 
   return (
     <div className="flex h-full w-full bg-bg">
@@ -96,16 +66,29 @@ export default function AppShell() {
         {activeView === "documents" && (
           <DocumentsView
             docs={docs}
+            activeDocId={activeDocId}
             uploadOpen={uploadOpen}
             onUploadOpen={() => setUploadOpen(true)}
             onUploadClose={() => setUploadOpen(false)}
-            onAddDoc={addDoc}
+            onUploadSuccess={handleUploadSuccess}
+            onSelectDoc={(docId) =>
+              setActiveDocId((prev) => (prev === docId ? null : docId))
+            }
+            onDeleteDoc={handleDeleteDoc}
           />
         )}
 
-        {activeView === "search" && <SearchView />}
+        {activeView === "search" && <SearchView activeDoc={activeDoc} />}
 
-        {activeView === "chat" && <ChatView healthOk={healthOk} />}
+        {activeView === "chat" && (
+          // Remount on doc switch so an earlier answer grounded in a
+          // different document is never mistaken for this one.
+          <ChatView
+            key={activeDocId ?? "all"}
+            healthOk={healthOk}
+            activeDoc={activeDoc}
+          />
+        )}
       </main>
     </div>
   );

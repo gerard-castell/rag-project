@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send } from "lucide-react";
 import { chat, ModelWarmingUpError } from "@/lib/api";
+import { Doc } from "./AppShell";
 
 interface Message {
   role: "user" | "assistant";
@@ -11,9 +12,10 @@ interface Message {
 
 interface ChatPanelProps {
   healthOk: boolean;
+  activeDoc: Doc | null;
 }
 
-export default function ChatPanel({ healthOk }: ChatPanelProps) {
+export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,7 +40,7 @@ export default function ChatPanel({ healthOk }: ChatPanelProps) {
     setWarmingUp(false);
 
     try {
-      const response = await chat(userMessage);
+      const response = await chat(userMessage, activeDoc?.doc_id);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: response.response },
@@ -66,6 +68,7 @@ export default function ChatPanel({ healthOk }: ChatPanelProps) {
         <h1 className="text-2xl font-serif font-bold text-ink">Chat</h1>
         <p className="text-sm text-ink-subtle mt-1">
           {healthOk ? "Backend ready" : "Backend unavailable"}
+          {activeDoc ? ` · Chatting with: ${activeDoc.source}` : " · All documents"}
         </p>
       </div>
 
