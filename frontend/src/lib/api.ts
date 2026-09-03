@@ -24,6 +24,8 @@ export interface HealthResponse {
   device: string;
 }
 
+export class ModelWarmingUpError extends Error {}
+
 export async function ingestPDF(file: File): Promise<IngestResponse> {
   const body = new FormData();
   body.append("file", file);
@@ -59,6 +61,11 @@ export async function chat(message: string): Promise<ChatResponse> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
+    if (res.status === 503) {
+      throw new ModelWarmingUpError(
+        text || "Model is warming up, retry shortly."
+      );
+    }
     throw new Error(text || res.statusText);
   }
   return res.json() as Promise<ChatResponse>;

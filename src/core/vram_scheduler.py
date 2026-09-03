@@ -3,13 +3,14 @@
 import asyncio
 import contextlib
 import time
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager
 
 import docker
 import docker.errors
 import httpx
 
+from src.core.exceptions import ContainerUnavailableError, ModelWarmupTimeoutError
 from src.core.logger import logger
 from src.ingestion.embedder import LocalEmbedder
 
@@ -33,6 +34,7 @@ class VRAMScheduler:
         self._idle_task: asyncio.Task[None] | None = None
         self._docker: docker.DockerClient | None = None
         self._docker_unavailable = False
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     @property
     def _client(self) -> docker.DockerClient | None:
@@ -51,6 +53,7 @@ class VRAMScheduler:
 
     async def start(self) -> None:
         """Start background idle watcher. Call once from app lifespan."""
+        self._loop = asyncio.get_running_loop()
         self._idle_task = asyncio.create_task(self._idle_watcher())
         logger.info(
             "VRAMScheduler idle watcher started (timeout=%ds).", self._idle_timeout
@@ -104,7 +107,14 @@ class VRAMScheduler:
         client = self._client
         if client is None:
             return
-        container = client.containers.get(self._container_name)
+        try:
+            container = client.containers.get(self._container_name)
+        except docker.errors.NotFound as exc:
+            raise ContainerUnavailableError(
+                f"Container '{self._container_name}' does not exist. Create it "
+                "(e.g. `docker compose up -d llama-cpp`) before sending chat "
+                "requests."
+            ) from exc
         if container.status != "running":
             container.start()
             logger.info("Container '%s' started.", self._container_name)
@@ -112,7 +122,10 @@ class VRAMScheduler:
     async def _ensure_running(self) -> None:
         """Start container if not running, then wait for /health."""
         await asyncio.to_thread(self._start_container)
-        await self._wait_until_ready()
+        try:
+            await self._wait_until_ready()
+        except TimeoutError as exc:
+            raise ModelWarmupTimeoutError(str(exc)) from exc
 
     async def _wait_until_ready(self, timeout: float = 120.0) -> None:
         """Poll /health every 2 s until llama.cpp responds 200 or timeout."""
@@ -131,6 +144,31 @@ class VRAMScheduler:
             f"llama.cpp at {self._llama_cpp_url} did not become ready within {timeout}s"
         )
 
+    def _container_status(self) -> str:
+        """Return the llama-cpp container's Docker status (blocking)."""
+        client = self._client
+        if client is None:
+            return "docker_unavailable"
+        try:
+            container = client.containers.get(self._container_name)
+            return str(container.status)
+        except docker.errors.NotFound:
+            return "not_found"
+
+    async def get_status(self) -> dict[str, object]:
+        """Return observable scheduler state for the /health endpoint."""
+        container_status = await asyncio.to_thread(self._container_status)
+        seconds_since_last_use = (
+            None
+            if self._last_used == 0.0
+            else round(time.monotonic() - self._last_used, 1)
+        )
+        return {
+            "container_status": container_status,
+            "lock_held": self._lock.locked(),
+            "seconds_since_last_use": seconds_since_last_use,
+        }
+
     @asynccontextmanager
     async def schedule_embedding(
         self, embedder: LocalEmbedder
@@ -142,6 +180,38 @@ class VRAMScheduler:
                 yield
             finally:
                 embedder.unload()
+
+    @contextmanager
+    def schedule_embedding_sync(
+        self, embedder: LocalEmbedder
+    ) -> Generator[None, None, None]:
+        """Provide a synchronous `schedule_embedding` for background-task threads.
+
+        Ingestion runs as a sync function in a worker thread, so it cannot
+        `async with` the scheduler's asyncio.Lock directly. This submits lock
+        acquire/release to the loop the scheduler started on, letting a whole
+        ingestion batch share one load() instead of thrashing per chunk batch.
+        """
+        if self._loop is None:
+            embedder.load()
+            try:
+                yield
+            finally:
+                embedder.unload()
+            return
+
+        acquire_future = asyncio.run_coroutine_threadsafe(
+            self._lock.acquire(), self._loop
+        )
+        acquire_future.result()
+        try:
+            embedder.load()
+            try:
+                yield
+            finally:
+                embedder.unload()
+        finally:
+            self._loop.call_soon_threadsafe(self._lock.release)
 
     @asynccontextmanager
     async def schedule_generation(self) -> AsyncGenerator[None, None]:

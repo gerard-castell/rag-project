@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send } from "lucide-react";
-import { chat, ChatResponse } from "@/lib/api";
+import { chat, ModelWarmingUpError } from "@/lib/api";
 
 interface Message {
   role: "user" | "assistant";
@@ -18,6 +18,7 @@ export default function ChatPanel({ healthOk }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warmingUp, setWarmingUp] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function ChatPanel({ healthOk }: ChatPanelProps) {
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
     setError(null);
+    setWarmingUp(false);
 
     try {
       const response = await chat(userMessage);
@@ -42,11 +44,15 @@ export default function ChatPanel({ healthOk }: ChatPanelProps) {
         { role: "assistant", content: response.response },
       ]);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Chat failed. Ensure documents are uploaded and the backend is running."
-      );
+      if (err instanceof ModelWarmingUpError) {
+        setWarmingUp(true);
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Chat failed. Ensure documents are uploaded and the backend is running."
+        );
+      }
       setMessages((prev) => prev.slice(0, -1)); // Remove user message on error
     } finally {
       setLoading(false);
@@ -110,6 +116,13 @@ export default function ChatPanel({ healthOk }: ChatPanelProps) {
               className="w-2 h-2 rounded-full bg-amber animate-bounce-dot"
               style={{ animationDelay: "0.4s" }}
             />
+          </div>
+        )}
+
+        {warmingUp && (
+          <div className="p-4 bg-amber/10 text-amber rounded-lg text-sm">
+            The model is warming up after being idle (cold start can take up
+            to two minutes). Please retry in a moment.
           </div>
         )}
 

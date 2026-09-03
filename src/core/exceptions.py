@@ -15,3 +15,11 @@ class EmbeddingGenerationError(RAGError):
 
 class VectorDBError(RAGError):
     """Raised when vector database operations fail."""
+
+
+class ContainerUnavailableError(RAGError):
+    """Raised when the llama.cpp Docker container cannot be found."""
+
+
+class ModelWarmupTimeoutError(RAGError):
+    """Raised when llama.cpp does not become ready within the cold-start timeout."""

@@ -21,10 +21,11 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
         logger.info(f"[Task {task_id}] Initializing processing of {file_path}")
 
         parser = DocumentParser()
-        from src.api.dependencies import get_embedder, get_vector_db
+        from src.api.dependencies import get_embedder, get_vector_db, get_vram_scheduler
 
         embedder = get_embedder()
         db = get_vector_db()
+        vram_scheduler = get_vram_scheduler()
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap
@@ -65,13 +66,11 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
             f"[Task {task_id}] Generating embeddings for {len(all_chunks)} chunks..."
         )
         try:
-            embedder.load()
-            embeddings_batch = embedder.generate(all_chunks)
+            with vram_scheduler.schedule_embedding_sync(embedder):
+                embeddings_batch = embedder.generate(all_chunks)
         except Exception as e:
             logger.error(f"[Task {task_id}] Embedding generation failed: {e}")
             raise
-        finally:
-            embedder.unload()
         all_points = []
         logger.info(
             f"[Task {task_id}] Preparing {len(all_chunks)} points for upsert..."
