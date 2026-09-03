@@ -1,0 +1,14 @@
+.venv/
+models_cache/
+temp_uploads/
+qdrant_storage/
+ollama_data/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.git/
+.gitignore
+docs/
+tests/
+*.md
