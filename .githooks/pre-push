@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Warn (non-blocking) when the current branch doesn't follow:
+#   <type>/<issue-number>-<short-slug>
+# e.g. feat/34-add-health-endpoint, fix/47-search-timeout
+#
+# Enable once per clone with: make hooks
+set -euo pipefail
+
+branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+
+# Nothing to check on a detached HEAD, and main/master are exempt.
+if [[ -z "$branch" || "$branch" == "main" || "$branch" == "master" ]]; then
+    exit 0
+fi
+
+pattern='^(feat|fix|docs|chore|refactor|perf|test|ci|build)/[0-9]+-[a-z0-9-]+$'
+
+if ! [[ "$branch" =~ $pattern ]]; then
+    cat <<EOF >&2
+Warning: branch name "$branch" doesn't follow the convention:
+  <type>/<issue-number>-<short-slug>
+
+Example: feat/34-add-health-endpoint
+
+This is a warning only — push will continue.
+EOF
+fi
+
+exit 0

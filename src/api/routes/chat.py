@@ -8,6 +8,7 @@ from src.api.dependencies import (
     VectorDBDep,
     VRAMSchedulerDep,
 )
+from src.core.exceptions import ContainerUnavailableError, ModelWarmupTimeoutError
 from src.schemas.chat import ChatRequest, ChatResponse
 from src.services.chat import generate_chat_response
 
@@ -27,5 +28,11 @@ async def chat_endpoint(
         return await generate_chat_response(
             request, embedder, db, vram_scheduler, llama_client
         )
+    except ModelWarmupTimeoutError as e:
+        raise HTTPException(
+            status_code=503, detail="Model is warming up, retry shortly."
+        ) from e
+    except ContainerUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

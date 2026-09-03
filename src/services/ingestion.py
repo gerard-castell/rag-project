@@ -13,19 +13,28 @@ from src.core.exceptions import DocumentParsingError, RAGError
 from src.core.logger import logger
 from src.core.settings import settings
 from src.ingestion.parser import DocumentParser
+from src.schemas.ingestion import TaskStatus
 from src.schemas.metadata import ChunkMetadata
 
 
 def run_ingestion_logic(file_path: str, task_id: str, original_filename: str) -> None:
     """Run the ingestion pipeline for a given file."""
+    from src.api.dependencies import (
+        get_embedder,
+        get_task_store,
+        get_vector_db,
+        get_vram_scheduler,
+    )
+
+    task_store = get_task_store()
     try:
         logger.info(f"[Task {task_id}] Initializing processing of {file_path}")
+        task_store.update(task_id, status=TaskStatus.PARSING)
 
         parser = DocumentParser()
-        from src.api.dependencies import get_embedder, get_vector_db
-
         embedder = get_embedder()
         db = get_vector_db()
+        vram_scheduler = get_vram_scheduler()
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap
@@ -62,25 +71,31 @@ def run_ingestion_logic(file_path: str, task_id: str, original_filename: str) ->
 
         if not all_chunks:
             logger.warning(f"[Task {task_id}] No text extracted to index.")
+            task_store.update(
+                task_id,
+                status=TaskStatus.FAILED,
+                error="No text could be extracted from the document.",
+            )
             return
+
+        total_chunks = len(all_chunks)
+        task_store.update(
+            task_id, status=TaskStatus.EMBEDDING, total_chunks=total_chunks
+        )
 
         db.setup_hybrid_collection(settings.collection_name)
 
         logger.info(
-            f"[Task {task_id}] Generating embeddings for {len(all_chunks)} chunks..."
+            f"[Task {task_id}] Generating embeddings for {total_chunks} chunks..."
         )
         try:
-            embedder.load()
-            embeddings_batch = embedder.generate(all_chunks)
+            with vram_scheduler.schedule_embedding_sync(embedder):
+                embeddings_batch = embedder.generate(all_chunks)
         except Exception as e:
             logger.error(f"[Task {task_id}] Embedding generation failed: {e}")
             raise
-        finally:
-            embedder.unload()
         all_points = []
-        logger.info(
-            f"[Task {task_id}] Preparing {len(all_chunks)} points for upsert..."
-        )
+        logger.info(f"[Task {task_id}] Preparing {total_chunks} points for upsert...")
         for chunk, metadata, vector_data in zip(
             all_chunks, chunk_metadatas, embeddings_batch, strict=True
         ):
@@ -97,17 +112,26 @@ def run_ingestion_logic(file_path: str, task_id: str, original_filename: str) ->
             )
             all_points.append(point)
 
-        if all_points:
+        batch_size = settings.ingestion_batch_size
+        chunks_indexed = 0
+        for start in range(0, len(all_points), batch_size):
+            batch = all_points[start : start + batch_size]
+            db.upsert_points(settings.collection_name, batch)
+            chunks_indexed += len(batch)
             logger.info(
-                f"[Task {task_id}] Saving {len(all_points)} vectors to Qdrant..."
+                f"[Task {task_id}] Upserted {chunks_indexed}/{total_chunks} chunks"
             )
-            db.upsert_points(settings.collection_name, all_points)
-            logger.info(f"[Task {task_id}] Pipeline finished successfully.")
+            task_store.update(task_id, chunks_indexed=chunks_indexed)
+
+        logger.info(f"[Task {task_id}] Pipeline finished successfully.")
+        task_store.update(task_id, status=TaskStatus.DONE)
 
     except RAGError as e:
         logger.error(f"[Task {task_id}] Application error: {e}")
+        task_store.update(task_id, status=TaskStatus.FAILED, error=str(e))
     except Exception as e:  # noqa: BLE001 - background task must not raise
         logger.error(f"[Task {task_id}] Unexpected error: {e}")
+        task_store.update(task_id, status=TaskStatus.FAILED, error=str(e))
     finally:
         gc.collect()
         if torch.cuda.is_available():

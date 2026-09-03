@@ -11,12 +11,19 @@ from src.core.settings import settings
 from src.core.vram_scheduler import VRAMScheduler
 from src.ingestion.database import VectorDB
 from src.ingestion.embedder import LocalEmbedder
+from src.services.task_store import TaskStore
 
 
 @lru_cache
 def get_embedder() -> LocalEmbedder:
     """Singleton-like dependency for the embedder."""
     return LocalEmbedder()
+
+
+@lru_cache
+def get_task_store() -> TaskStore:
+    """Singleton-like dependency for the ingestion task store."""
+    return TaskStore()
 
 
 @lru_cache
@@ -46,3 +53,4 @@ VectorDBDep = Annotated[VectorDB, Depends(get_vector_db)]
 QdrantClientDep = Annotated[QdrantClient, Depends(lambda: get_vector_db().client)]
 LlamaCppClientDep = Annotated[LlamaCppClient, Depends(get_llama_client)]
 VRAMSchedulerDep = Annotated[VRAMScheduler, Depends(get_vram_scheduler)]
+TaskStoreDep = Annotated[TaskStore, Depends(get_task_store)]

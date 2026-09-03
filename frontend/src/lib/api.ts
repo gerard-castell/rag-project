@@ -6,6 +6,20 @@ export interface IngestResponse {
   info: string;
 }
 
+export type IngestTaskStatus =
+  | "queued"
+  | "parsing"
+  | "embedding"
+  | "done"
+  | "failed";
+
+export interface IngestTaskRecord {
+  status: IngestTaskStatus;
+  chunks_indexed: number;
+  total_chunks: number;
+  error: string | null;
+}
+
 export interface SearchResult {
   text: string;
   score: number;
@@ -32,6 +46,8 @@ export interface Doc {
   chunk_count: number;
 }
 
+export class ModelWarmingUpError extends Error {}
+
 export async function ingestPDF(file: File): Promise<IngestResponse> {
   const body = new FormData();
   body.append("file", file);
@@ -41,6 +57,17 @@ export async function ingestPDF(file: File): Promise<IngestResponse> {
     throw new Error(text || res.statusText);
   }
   return res.json() as Promise<IngestResponse>;
+}
+
+export async function getIngestStatus(
+  taskId: string
+): Promise<IngestTaskRecord> {
+  const res = await fetch(`${BASE}/ingest/${taskId}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text || res.statusText);
+  }
+  return res.json() as Promise<IngestTaskRecord>;
 }
 
 export async function search(
@@ -76,6 +103,11 @@ export async function chat(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
+    if (res.status === 503) {
+      throw new ModelWarmingUpError(
+        text || "Model is warming up, retry shortly."
+      );
+    }
     throw new Error(text || res.statusText);
   }
   return res.json() as Promise<ChatResponse>;

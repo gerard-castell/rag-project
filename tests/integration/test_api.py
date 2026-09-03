@@ -1,10 +1,14 @@
 """Integration tests for the RAG API."""
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.api.dependencies import get_embedder, get_vector_db
+from src.api.dependencies import get_embedder, get_vector_db, get_vram_scheduler
+from src.core.exceptions import ModelWarmupTimeoutError
 from src.main import app
+from tests.conftest import NoOpVRAMScheduler
 
 
 def test_health_check(client: Any) -> None:
@@ -12,6 +16,17 @@ def test_health_check(client: Any) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_health_gpu_reports_observability_fields(client: Any) -> None:
+    """/health/gpu surfaces llama.cpp reachability, container state, and lock."""
+    response = client.get("/health/gpu")
+    assert response.status_code == 200
+    body = response.json()
+    assert "llama_cpp_reachable" in body
+    assert "container_status" in body
+    assert "lock_held" in body
+    assert "seconds_since_last_use" in body
 
 
 def test_search_validation(client: Any) -> None:
@@ -129,3 +144,60 @@ def test_delete_document_not_found_returns_404(client: Any) -> None:
         app.dependency_overrides.pop(get_vector_db, None)
 
     assert response.status_code == 404
+
+
+def test_chat_returns_503_when_model_is_warming_up(client: Any) -> None:
+    """A cold-start timeout surfaces as a 503 with a retry-shortly message."""
+
+    class TimingOutScheduler(NoOpVRAMScheduler):
+        """Scheduler stand-in whose generation slot always times out."""
+
+        @asynccontextmanager
+        async def schedule_generation(self) -> AsyncGenerator[None, None]:
+            raise ModelWarmupTimeoutError("llama.cpp did not become ready")
+            yield  # pragma: no cover - unreachable, satisfies generator typing
+
+    stub_embedder = MagicMock()
+    stub_embedder.generate.return_value = [
+        {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
+    ]
+    stub_db = MagicMock()
+    stub_db.client.query_points.return_value = MagicMock(points=[])
+
+    app.dependency_overrides[get_embedder] = lambda: stub_embedder
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    app.dependency_overrides[get_vram_scheduler] = TimingOutScheduler
+    try:
+        response = client.post("/chat", json={"message": "hello"})
+    finally:
+        app.dependency_overrides.pop(get_embedder, None)
+        app.dependency_overrides.pop(get_vector_db, None)
+        app.dependency_overrides[get_vram_scheduler] = NoOpVRAMScheduler
+
+    assert response.status_code == 503
+    assert "warming up" in response.json()["detail"]
+
+
+def test_ingest_status_unknown_task_returns_404(client: Any) -> None:
+    """Verifies that checking an unknown task_id returns 404."""
+    response = client.get("/ingest/does-not-exist")
+    assert response.status_code == 404
+
+
+def test_ingest_creates_queued_task_status(client: Any) -> None:
+    """Verifies that uploading a PDF immediately registers a queued task."""
+    with patch("src.api.routes.ingest.run_ingestion_logic") as mock_run:
+        response = client.post(
+            "/ingest", files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
+        )
+    assert response.status_code == 202
+    mock_run.assert_called_once()
+    task_id = response.json()["task_id"]
+
+    status_response = client.get(f"/ingest/{task_id}")
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert body["status"] == "queued"
+    assert body["chunks_indexed"] == 0
+    assert body["total_chunks"] == 0
+    assert body["error"] is None

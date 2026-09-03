@@ -6,7 +6,7 @@ MODEL_REPO_FILE=gemma-4-E4B-it-Q4_K_M.gguf
 
 .PHONY: help up run down restart logs logs-api logs-frontend status clean \
 	frontend-dev frontend-build frontend-install frontend-type-check frontend-lint \
-	fetch-model lint test
+	fetch-model lint test hooks
 
 help:
 	@echo "Available commands:"
@@ -22,6 +22,7 @@ help:
 	@echo "  make clean           - Stop containers and remove volumes (WARNING: deletes data)"
 	@echo "  make lint            - Run ruff and mypy checks"
 	@echo "  make test            - Run the test suite"
+	@echo "  make hooks           - Install commit-msg/pre-push git hooks (commit convention)"
 	@echo ""
 	@echo "Frontend development:"
 	@echo "  make frontend-dev    - Run frontend dev server (requires backend running)"
@@ -76,6 +77,10 @@ lint:
 
 test:
 	uv run pytest
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks enabled (.githooks) — commit messages and branch names are now checked."
 
 frontend-dev:
 	cd frontend && NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
