@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.api.dependencies import get_embedder, get_vector_db, get_vram_scheduler
 from src.core.exceptions import ModelWarmupTimeoutError
@@ -104,3 +104,28 @@ def test_chat_returns_503_when_model_is_warming_up(client: Any) -> None:
 
     assert response.status_code == 503
     assert "warming up" in response.json()["detail"]
+
+
+def test_ingest_status_unknown_task_returns_404(client: Any) -> None:
+    """Verifies that checking an unknown task_id returns 404."""
+    response = client.get("/ingest/does-not-exist")
+    assert response.status_code == 404
+
+
+def test_ingest_creates_queued_task_status(client: Any) -> None:
+    """Verifies that uploading a PDF immediately registers a queued task."""
+    with patch("src.api.routes.ingest.run_ingestion_logic") as mock_run:
+        response = client.post(
+            "/ingest", files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
+        )
+    assert response.status_code == 202
+    mock_run.assert_called_once()
+    task_id = response.json()["task_id"]
+
+    status_response = client.get(f"/ingest/{task_id}")
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert body["status"] == "queued"
+    assert body["chunks_indexed"] == 0
+    assert body["total_chunks"] == 0
+    assert body["error"] is None
