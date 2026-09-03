@@ -12,11 +12,19 @@ from src.core.settings import settings
 
 
 class LocalEmbedder:
-    """Class to generate embeddings ensuring GPU usage for both Dense and Sparse models."""
+    """Class to generate embeddings ensuring GPU usage for both Dense and Sparse models.
+
+    Models are loaded lazily via `load()` and released via `unload()` so that
+    callers can time-share GPU memory with other models (see
+    `VRAMScheduler.schedule_embedding`). Use `generate()` only from within
+    that context; calling it before `load()` raises `RuntimeError`.
+    """
 
     def __init__(self) -> None:
         self.device = "cpu"
         self.sparse_providers = ["CPUExecutionProvider"]
+        self.dense_model: SentenceTransformer | None = None
+        self.sparse_model: SparseTextEmbedding | None = None
 
         if torch.cuda.is_available():
             self.device = "cuda"
@@ -38,6 +46,11 @@ class LocalEmbedder:
         else:
             logger.info("Using CPU for all models.")
 
+    def load(self) -> None:
+        """Load the dense and sparse models onto the target device, if not already loaded."""
+        if self.dense_model is not None and self.sparse_model is not None:
+            return
+
         logger.info(
             f"Loading Dense Model: {settings.dense_model_name} on {self.device}"
         )
@@ -48,7 +61,8 @@ class LocalEmbedder:
         )
 
         logger.info(
-            f"Loading Sparse Model: {settings.sparse_model_name} with {self.sparse_providers[0]}"
+            f"Loading Sparse Model: {settings.sparse_model_name} "
+            f"with {self.sparse_providers[0]}"
         )
         self.sparse_model = SparseTextEmbedding(
             model_name=settings.sparse_model_name,
@@ -57,17 +71,35 @@ class LocalEmbedder:
             threads=None,
         )
 
+    def unload(self) -> None:
+        """Release the dense and sparse models to free GPU/CPU memory."""
+        self.dense_model = None
+        self.sparse_model = None
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+
+    def _require_models(self) -> tuple[SentenceTransformer, SparseTextEmbedding]:
+        """Return the loaded models, raising if `load()` was never called."""
+        if self.dense_model is None or self.sparse_model is None:
+            raise RuntimeError(
+                "Embedder models are not loaded. "
+                "Use within schedule_embedding() context."
+            )
+        return self.dense_model, self.sparse_model
+
     def generate(self, texts: list[str]) -> list[dict[str, Any]]:
         """Generate both Dense (Semantic) and Sparse (Keyword) embeddings."""
+        dense_model, sparse_model = self._require_models()
+
         with torch.no_grad():
-            dense_embeddings = self.dense_model.encode(
+            dense_embeddings = dense_model.encode(
                 texts,
                 batch_size=settings.embedding_batch_size,
                 show_progress_bar=False,
                 convert_to_numpy=True,
                 normalize_embeddings=True,
             )
-        sparse_embeddings_gen = self.sparse_model.embed(
+        sparse_embeddings_gen = sparse_model.embed(
             texts, batch_size=settings.embedding_batch_size
         )
 
