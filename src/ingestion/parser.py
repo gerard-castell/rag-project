@@ -1,6 +1,7 @@
 """Document parser using LlamaParse."""
 
 import os
+from typing import cast
 
 from llama_index.core.schema import Document
 from llama_parse import LlamaParse, ResultType
@@ -21,4 +22,4 @@ class DocumentParser:
         """Parse the document at the given file path."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-        return self.parser.load_data(file_path)
+        return cast("list[Document]", self.parser.load_data(file_path))

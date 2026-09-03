@@ -7,6 +7,7 @@ from src.core.settings import settings
 from src.core.vram_scheduler import VRAMScheduler
 from src.ingestion.database import VectorDB
 from src.ingestion.embedder import LocalEmbedder
+from src.schemas.metadata import ChunkMetadata
 from src.schemas.search import SearchRequest, SearchResponse
 
 
@@ -55,7 +56,7 @@ async def perform_hybrid_search(
             SearchResponse(
                 text=payload.get("text", ""),
                 score=point.score,
-                metadata=payload.get("metadata", {}),
+                metadata=ChunkMetadata.model_validate(payload.get("metadata", {})),
             )
         )
 

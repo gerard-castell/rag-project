@@ -6,6 +6,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from src.core.settings import settings
 from src.services.ingestion import run_ingestion_logic
@@ -27,9 +28,12 @@ async def ingest_endpoint(
 
     file_path = upload_dir / f"{task_id}_{file.filename}"
 
-    try:
+    def _write_file() -> None:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+
+    try:
+        await run_in_threadpool(_write_file)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error writing file: {e}") from e
 

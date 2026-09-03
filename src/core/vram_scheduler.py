@@ -23,10 +23,7 @@ class VRAMScheduler:
     """
 
     def __init__(
-        self,
-        container_name: str,
-        llama_cpp_url: str,
-        idle_timeout_seconds: int,
+        self, container_name: str, llama_cpp_url: str, idle_timeout_seconds: int
     ) -> None:
         self._lock = asyncio.Lock()
         self._container_name = container_name
