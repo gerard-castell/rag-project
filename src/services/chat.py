@@ -28,8 +28,7 @@ async def generate_chat_response(
         query=request.message, limit=settings.default_search_limit
     )
 
-    async with vram_scheduler.schedule_embedding(embedder):
-        results = perform_hybrid_search(search_request, embedder, db)
+    results = await perform_hybrid_search(search_request, embedder, db, vram_scheduler)
 
     context_blocks = [f"[{i + 1}] {r.text}" for i, r in enumerate(results)]
     context = "\n\n".join(context_blocks)

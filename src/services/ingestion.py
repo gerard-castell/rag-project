@@ -63,10 +63,13 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
             f"[Task {task_id}] Generating embeddings for {len(all_chunks)} chunks..."
         )
         try:
+            embedder.load()
             embeddings_batch = embedder.generate(all_chunks)
         except Exception as e:
             logger.error(f"[Task {task_id}] Embedding generation failed: {e}")
             raise e
+        finally:
+            embedder.unload()
         all_points = []
         logger.info(
             f"[Task {task_id}] Preparing {len(all_chunks)} points for upsert..."
