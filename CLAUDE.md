@@ -4,6 +4,10 @@ This file provides guidance to Claude Code.
 ## Commands
 
 ```bash
+make fetch-model              # download the llama.cpp GGUF model into models/
+make up                       # docker compose up -d --build (qdrant, llama-cpp, api, frontend)
+make down                     # docker compose down
+make logs / logs-api / logs-frontend
 uv run python -m src.main
 uv run uvicorn src.main:app --reload
 uv run pytest
@@ -13,28 +17,66 @@ uv run ruff format .
 uv run mypy src/
 ```
 
-Qdrant must be running locally at `http://localhost:6333`.
+`docker compose` (via `make up`) runs the full stack: `qdrant`, `llama-cpp`, `api`,
+`frontend`. Do not run Qdrant manually — `make up` starts it as part of Compose. See
+`README.md` for the full quickstart, env vars, and endpoint reference.
 
 ## Architecture
 
-This is a FastAPI-based RAG API for PDF ingestion and hybrid vector search.
+This is a FastAPI-based RAG system for PDF ingestion, hybrid vector search, and
+LLM-backed chat, paired with a Next.js frontend and a llama.cpp container for
+generation.
 
 **Request flow:**
 
-1. `POST /ingest` — accepts a PDF, saves it to `temp_uploads/`, and queues a background task (`run_ingestion_logic` in `src/services/ingestion.py`)
-2. The background task: parses PDF via LlamaParse → splits text → generates dense+sparse embeddings → upserts into Qdrant
-3. `POST /search` — embeds the query, runs a hybrid search (dense BGE + sparse SPLADE) with RRF fusion via Qdrant
+1. `POST /ingest` — accepts a PDF, saves it to `temp_uploads/`, and queues a background
+   task (`run_ingestion_logic` in `src/services/ingestion.py`)
+2. The background task: parses PDF via LlamaParse → splits text → generates dense+sparse
+   embeddings → upserts into Qdrant
+3. `POST /search` — embeds the query, runs a hybrid search (dense BGE + sparse SPLADE)
+   with RRF fusion via Qdrant
+4. `POST /chat` — runs the same hybrid search, assembles a context-only prompt, and
+   sends it to the llama.cpp container's `/completion` endpoint (`src/services/chat.py`)
+5. `GET /health` — liveness check, also reports the detected GPU/CPU device
 
 **Key layers:**
-- `src/core/` — settings (Pydantic), logger, custom exceptions (`RAGError` hierarchy)
-- `src/ingestion/` — `DocumentParser` (LlamaParse), `LocalEmbedder` (fastembed, BAAI/bge-m3 + SPLADE), `VectorDB` (Qdrant client)
-- `src/services/` — business logic for ingestion and search (called from routes)
-- `src/api/routes/` — FastAPI routers; dependencies (embedder/db singletons) in `src/api/dependencies.py`
+- `src/core/` — settings (Pydantic), logger, custom exceptions (`RAGError` hierarchy),
+  `LlamaCppClient` (HTTP client for the llama.cpp container), `VRAMScheduler`
+  (GPU time-sharing, see below)
+- `src/ingestion/` — `DocumentParser` (LlamaParse), `LocalEmbedder` (fastembed /
+  sentence-transformers, BAAI/bge-m3 + SPLADE), `VectorDB` (Qdrant client)
+- `src/services/` — business logic for ingestion, search, and chat (called from routes)
+- `src/api/routes/` — FastAPI routers (`health`, `ingest`, `search`, `chat`);
+  dependencies (embedder/db/llama client/scheduler singletons) in
+  `src/api/dependencies.py`
 - `src/schemas/` — Pydantic request/response models
+- `frontend/` — Next.js (App Router) UI; calls the backend through a `/api/*` rewrite
+  proxy to `BACKEND_URL` (see `frontend/next.config.ts`, `frontend/src/lib/api.ts`)
 
-**Embedding strategy:** Hybrid — dense vectors (`dense-bge`) + sparse vectors (`sparse-splade`) stored as named vectors in Qdrant. Search uses `Prefetch` + `FusionQuery(RRF)`.
+**Embedding strategy:** Hybrid — dense vectors (`dense-bge`) + sparse vectors
+(`sparse-splade`) stored as named vectors in Qdrant. Search uses `Prefetch` +
+`FusionQuery(RRF)`. A `BAAI/bge-reranker-v2-m3` cross-encoder is configured
+(`rerank_model_name` setting) but is **not currently invoked** in `search.py` or
+`chat.py` — treat it as reserved/planned, not part of the live request path, unless
+you are the one wiring it in.
 
-**Dependency injection:** `get_embedder()` and `get_vector_db()` in `src/api/dependencies.py` are cached singletons. The embedder is pre-loaded at startup via the FastAPI lifespan.
+**GPU / VRAM constraint:** the project targets a single GPU that cannot hold the
+embedding models and the LLM in VRAM simultaneously. `VRAMScheduler`
+(`src/core/vram_scheduler.py`) enforces strict time-sharing via one `asyncio.Lock`:
+- `schedule_embedding()` loads/unloads `LocalEmbedder` in-process around each use.
+- `schedule_generation()` starts the `llama-cpp-gpu` Docker container on demand
+  (via the Docker Engine API, over the `/var/run/docker.sock` mount in
+  `docker-compose.yml`), waits for its `/health` endpoint, and lets a background idle
+  watcher stop the container after `LLAMA_IDLE_TIMEOUT_SECONDS` (default 300s) of
+  inactivity.
+Both code paths go through the same lock, so embedding and LLM generation never run
+concurrently on the GPU.
+
+**Dependency injection:** `get_embedder()`, `get_vector_db()`, `get_llama_client()`,
+and `get_vram_scheduler()` in `src/api/dependencies.py` are `lru_cache`-backed
+singletons. The embedder is **not** pre-loaded at startup — it is loaded and unloaded
+per-request through `VRAMScheduler.schedule_embedding()`. The `VRAMScheduler`'s idle
+watcher is started/stopped via the FastAPI lifespan in `src/main.py`.
 
 ## Code Style
 

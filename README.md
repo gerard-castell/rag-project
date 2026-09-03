@@ -1,0 +1,145 @@
+# RAG Project
+
+A self-hosted, hybrid-search RAG (Retrieval-Augmented Generation) system: upload PDFs,
+search them with dense + sparse vector retrieval, and chat over them with a locally
+served LLM — all on a single GPU.
+
+Backend is FastAPI + Qdrant + fastembed. The LLM runs in a llama.cpp container. A
+`VRAMScheduler` time-shares the one available GPU between the embedding models and the
+LLM so both fit on modest hardware. Frontend is Next.js.
+
+## Architecture
+
+```
+┌────────────┐      /api/*        ┌──────────────┐
+│  Next.js   │ ─────────────────► │   FastAPI    │
+│  frontend  │  (rewrite proxy)   │   backend    │
+│ (port 3000)│                    │  (port 8000) │
+└────────────┘                    └──────┬───────┘
+                                          │
+                    ┌─────────────────────┼─────────────────────┐
+                    │                     │                     │
+                    ▼                     ▼                     ▼
+             ┌─────────────┐      ┌──────────────┐      ┌───────────────┐
+             │   Qdrant    │      │  LlamaParse   │      │  llama.cpp    │
+             │ (port 6333) │      │ (external API,│      │  container    │
+             │ hybrid      │      │  PDF parsing) │      │ (port 8080)   │
+             │ vector store│      └──────────────┘      │  gemma-4-E4B  │
+             └─────────────┘                             └───────────────┘
+                    ▲
+                    │  dense (BAAI/bge-m3) + sparse (SPLADE) embeddings,
+                    │  generated in-process by the FastAPI container
+                    └────────────────── GPU ──────────────────┘
+                         time-shared by VRAMScheduler
+```
+
+- **Ingest**: `POST /ingest` saves the uploaded PDF, then a background task parses it
+  with LlamaParse, splits the text, generates dense (`BAAI/bge-m3`) and sparse
+  (`prithivida/Splade_PP_en_v1`, SPLADE) embeddings locally via `fastembed` /
+  `sentence-transformers`, and upserts everything into Qdrant as named vectors
+  (`dense-bge`, `sparse-splade`).
+- **Search**: `POST /search` embeds the query and runs a hybrid Qdrant query
+  (`Prefetch` on both vectors + `FusionQuery(RRF)`).
+- **Chat**: `POST /chat` runs the same hybrid search, stuffs the retrieved chunks into a
+  context-only system prompt, and sends it to the llama.cpp container's
+  `/completion` endpoint.
+- **VRAM scheduler**: see [GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler) below.
+
+Note: `BAAI/bge-reranker-v2-m3` is present as a configured setting
+(`rerank_model_name`) but is **not currently wired into the search or chat path** —
+no reranking step runs today. Treat it as reserved/planned, not active.
+
+## Quickstart
+
+Requires Docker, Docker Compose, an NVIDIA GPU + drivers (for the `llama-cpp` and
+`api` containers, both request a GPU via Compose), and a
+[LlamaParse API key](https://cloud.llamaindex.ai/).
+
+```bash
+git clone <this-repo>
+cd rag-project
+
+# 1. Download the LLM weights used by the llama.cpp container
+make fetch-model
+
+# 2. Set required env vars (see below), then build and start the full stack
+make up
+```
+
+`make up` runs `docker compose up -d --build`, which starts four services: `qdrant`,
+`llama-cpp`, `api`, and `frontend`.
+
+- Frontend: http://localhost:3000
+- API: http://localhost:8000 (docs at http://localhost:8000/docs)
+- Qdrant: http://localhost:6333
+- llama.cpp server: http://localhost:8080
+
+Other useful targets: `make down`, `make restart`, `make logs` / `make logs-api` /
+`make logs-frontend`, `make status`, `make clean` (also removes volumes), `make lint`,
+`make test`. For local (non-Docker) dev: `make frontend-dev`,
+`make frontend-install`, `uv run uvicorn src.main:app --reload`.
+
+## Environment variables
+
+Copy [`.env.example`](./.env.example) to `.env` and set `LLAMA_PARSE_API_KEY` — every
+other setting has a working default. `.env.example` documents the full list.
+
+## Endpoint reference
+
+Four endpoints — `GET /health`, `POST /ingest`, `POST /search`, `POST /chat`. See
+[`docs/api.md`](./docs/api.md) for a written summary, or `/docs` (Swagger UI) for
+full request/response schemas once the API is running.
+
+## GPU / VRAM constraint (and the VRAMScheduler)
+
+This project is built to run entirely on a single consumer GPU, which is not big
+enough to keep the embedding models and the LLM resident in VRAM at the same time.
+Rather than run everything simultaneously and risk an out-of-memory crash, the
+`api` container includes a `VRAMScheduler` (`src/core/vram_scheduler.py`) that
+strictly time-shares the GPU:
+
+- A single `asyncio.Lock` serializes all GPU work, so embedding generation and LLM
+  generation never run concurrently.
+- **Embedding models** (dense BGE + sparse SPLADE) are loaded/unloaded in-process
+  around each use (`schedule_embedding`), releasing CUDA memory (`torch.cuda.empty_cache()`)
+  when idle.
+- **The LLM** runs in its own Docker container (`llama-cpp-gpu`, built from
+  `ghcr.io/ggml-org/llama.cpp:full-cuda`). The scheduler controls its lifecycle
+  directly through the Docker Engine API (the `api` container mounts
+  `/var/run/docker.sock` for this), starting it on demand for `/chat`
+  (`schedule_generation`, which polls the llama.cpp `/health` endpoint until ready)
+  and stopping it automatically after `LLAMA_IDLE_TIMEOUT_SECONDS` (default 300s) of
+  inactivity via a background idle watcher.
+- This means the first chat request after a period of inactivity pays a container
+  start + model load latency cost, in exchange for embedding and ingestion work
+  never being starved of VRAM by an LLM sitting loaded but idle.
+
+The project originally targeted an Ollama-based setup on a 6GB-class GPU, where the
+combined footprint of the LLM (~4.6GB) plus the embedding and reranking models
+(~0.5–0.6GB each) would have exceeded available VRAM if all were resident at once.
+The LLM serving layer was later moved from Ollama to a llama.cpp container, but the
+same underlying constraint — one GPU, more model memory than it can hold at once —
+is why the scheduler exists.
+
+## Learning roadmap
+
+[`steps.md`](./steps.md) is the running log of the sprint-by-sprint plan this project
+was built against (in Spanish), from initial ingestion/search through hybrid
+retrieval, reranking, an agentic layer, and evaluation.
+
+## Evaluation results
+
+_Not yet available._ A RAGAS-based evaluation of retrieval and answer quality is
+planned but not implemented in this repo yet — results will be added to this section
+once that work lands.
+
+## Development
+
+```bash
+uv run uvicorn src.main:app --reload   # run the API locally (needs Qdrant/llama.cpp reachable)
+uv run pytest                          # run tests
+uv run ruff check . && uv run ruff format . && uv run mypy src/   # lint/type-check
+```
+
+See [`CLAUDE.md`](./CLAUDE.md) for a more detailed architecture/code-style guide aimed
+at contributors and AI coding agents.
