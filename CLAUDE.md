@@ -41,3 +41,5 @@ This is a FastAPI-based RAG API for PDF ingestion and hybrid vector search.
 - Ruff with strict rules (pydocstring PEP257, isort, bugbear); `ruff check . && ruff format .`
 - mypy strict mode — all functions must be typed; `disallow_any_explicit = true`
 - Double quotes, 88-char line length
+- No multiline docstrings/comments unless critical (e.g. explaining a non-obvious invariant or bug workaround); prefer a single-line docstring
+- When addressing PR review feedback, follow the specific guidance left in each comment rather than a generic fix

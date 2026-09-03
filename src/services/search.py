@@ -16,11 +16,7 @@ async def perform_hybrid_search(
     db: VectorDB,
     vram_scheduler: VRAMScheduler,
 ) -> list[SearchResponse]:
-    """Do a hybrid search (Dense + Sparse) using RRF.
-
-    Loads the embedder models via the VRAM scheduler for the duration of the
-    call, so callers never need to remember to do so themselves.
-    """
+    """Do a hybrid search (Dense + Sparse) using RRF, loading the embedder as needed."""
     try:
         async with vram_scheduler.schedule_embedding(embedder):
             vector_data = embedder.generate([request.query])[0]
