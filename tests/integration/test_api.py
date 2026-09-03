@@ -11,7 +11,7 @@ def test_health_check(client: Any) -> None:
     """Verifies that the health check endpoint returns 200."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "online"
+    assert response.json()["status"] == "ok"
 
 
 def test_search_validation(client: Any) -> None:
@@ -27,8 +27,9 @@ def test_search_returns_200_with_stubbed_embedder(client: Any) -> None:
         {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
     ]
 
+    stub_metadata = {"source": "report.pdf", "page": 1, "doc_id": "task-1"}
     stub_point = MagicMock()
-    stub_point.payload = {"text": "hello world", "metadata": {}}
+    stub_point.payload = {"text": "hello world", "metadata": stub_metadata}
     stub_point.score = 0.9
 
     stub_db = MagicMock()
@@ -44,7 +45,7 @@ def test_search_returns_200_with_stubbed_embedder(client: Any) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body == [{"text": "hello world", "score": 0.9, "metadata": {}}]
+    assert body == [{"text": "hello world", "score": 0.9, "metadata": stub_metadata}]
     stub_embedder.load.assert_called_once()
     stub_embedder.unload.assert_called_once()
 
@@ -55,4 +56,4 @@ def test_ingest_validation(client: Any) -> None:
         "/ingest", files={"file": ("test.txt", b"content", "text/plain")}
     )
     assert response.status_code == 400
-    assert "Solo soportamos PDF" in response.json()["detail"]
+    assert "Only PDF files are supported." in response.json()["detail"]

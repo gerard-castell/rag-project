@@ -12,6 +12,7 @@ from src.core.exceptions import DocumentParsingError, RAGError
 from src.core.logger import logger
 from src.core.settings import settings
 from src.ingestion.parser import DocumentParser
+from src.schemas.metadata import ChunkMetadata
 
 
 def run_ingestion_logic(file_path: str, task_id: str) -> None:
@@ -36,8 +37,8 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
             raise DocumentParsingError(f"Failed to parse document: {e}") from e
 
         logger.info(f"[Task {task_id}] Splitting documents into chunks...")
-        all_chunks = []
-        chunk_metadatas = []
+        all_chunks: list[str] = []
+        chunk_metadatas: list[ChunkMetadata] = []
 
         for doc in docs:
             chunks = splitter.split_text(doc.text)
@@ -47,10 +48,11 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
             for chunk in chunks:
                 all_chunks.append(chunk)
                 chunk_metadatas.append(
-                    {
-                        "source": os.path.basename(file_path),
-                        "page": doc.metadata.get("page", 0),
-                    }
+                    ChunkMetadata(
+                        source=os.path.basename(file_path),
+                        page=doc.metadata.get("page", 0),
+                        doc_id=task_id,
+                    )
                 )
 
         if not all_chunks:
@@ -67,7 +69,7 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
             embeddings_batch = embedder.generate(all_chunks)
         except Exception as e:
             logger.error(f"[Task {task_id}] Embedding generation failed: {e}")
-            raise e
+            raise
         finally:
             embedder.unload()
         all_points = []
@@ -86,7 +88,7 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
                         values=vector_data["sparse_values"],
                     ),
                 },
-                payload={"text": chunk, "metadata": metadata},
+                payload={"text": chunk, "metadata": metadata.model_dump()},
             )
             all_points.append(point)
 
@@ -99,7 +101,7 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
 
     except RAGError as e:
         logger.error(f"[Task {task_id}] Application error: {e}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - background task must not raise
         logger.error(f"[Task {task_id}] Unexpected error: {e}")
     finally:
         gc.collect()
@@ -113,7 +115,7 @@ def run_ingestion_logic(file_path: str, task_id: str) -> None:
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - best-effort cleanup
                 logger.warning(
                     f"[Task {task_id}] Could not delete temp file {file_path}: {e}"
                 )

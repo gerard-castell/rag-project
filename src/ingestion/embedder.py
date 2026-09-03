@@ -1,6 +1,6 @@
 """Local embedder for generating dense and sparse embeddings on GPU."""
 
-from typing import Any
+from typing import TypedDict
 
 import onnxruntime as ort
 import torch
@@ -9,6 +9,14 @@ from sentence_transformers import SentenceTransformer
 
 from src.core.logger import logger
 from src.core.settings import settings
+
+
+class Embedding(TypedDict):
+    """Dense and sparse vector representation of a single text chunk."""
+
+    dense: list[float]
+    sparse_indices: list[int]
+    sparse_values: list[float]
 
 
 class LocalEmbedder:
@@ -30,9 +38,10 @@ class LocalEmbedder:
                 logger.info("Sparse Model: CUDA Execution Provider enabled.")
             else:
                 logger.critical(
-                    "CUDA is available for Torch, but ONNX Runtime cannot find 'CUDAExecutionProvider'. "
-                    "Sparse model will fallback to CPU. "
-                    "ACTION: Ensure 'onnxruntime-gpu' is installed and 'onnxruntime' is uninstalled."
+                    "CUDA is available for Torch, but ONNX Runtime cannot find "
+                    "'CUDAExecutionProvider'. Sparse model will fallback to CPU. "
+                    "ACTION: Ensure 'onnxruntime-gpu' is installed and "
+                    "'onnxruntime' is uninstalled."
                 )
         elif torch.backends.mps.is_available():
             self.device = "mps"
@@ -41,7 +50,7 @@ class LocalEmbedder:
             logger.info("Using CPU for all models.")
 
     def load(self) -> None:
-        """Load the dense and sparse models onto the target device, if not already loaded."""
+        """Load the dense and sparse models onto the target device, if not loaded."""
         if self.dense_model is not None and self.sparse_model is not None:
             return
 
@@ -81,7 +90,7 @@ class LocalEmbedder:
             )
         return self.dense_model, self.sparse_model
 
-    def generate(self, texts: list[str]) -> list[dict[str, Any]]:
+    def generate(self, texts: list[str]) -> list[Embedding]:
         """Generate both Dense (Semantic) and Sparse (Keyword) embeddings."""
         dense_model, sparse_model = self._require_models()
 
@@ -97,14 +106,14 @@ class LocalEmbedder:
             texts, batch_size=settings.embedding_batch_size
         )
 
-        results = []
+        results: list[Embedding] = []
         for dense, sparse in zip(dense_embeddings, sparse_embeddings_gen, strict=True):
             results.append(
-                {
-                    "dense": dense.tolist(),
-                    "sparse_indices": sparse.indices.tolist(),
-                    "sparse_values": sparse.values.tolist(),
-                }
+                Embedding(
+                    dense=dense.tolist(),
+                    sparse_indices=sparse.indices.tolist(),
+                    sparse_values=sparse.values.tolist(),
+                )
             )
 
         return results

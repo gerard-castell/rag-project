@@ -26,6 +26,7 @@ dependencies = [
 line-length = 88
 target-version = "py312"
 fix = true
+extend-exclude = [".agents"]
 lint.extend-select = ["I", "B", "UP", "SIM", "RUF", "D", "TID", "N", "E", "F"]
 
 lint.ignore = ["E203", "D100", "D104", "D107", "D203", "D213", "TID252"]
@@ -80,7 +81,9 @@ pythonpath = ["."]
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "mypy>=2.3.1",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "respx>=0.23.1",
+    "ruff>=0.16.5",
 ]

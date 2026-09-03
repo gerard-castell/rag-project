@@ -1,8 +1,8 @@
 """Pydantic schemas for search operations."""
 
-from typing import Any
-
 from pydantic import BaseModel, Field
+
+from src.schemas.metadata import ChunkMetadata
 
 
 class SearchRequest(BaseModel):
@@ -17,4 +17,4 @@ class SearchResponse(BaseModel):
 
     text: str
     score: float
-    metadata: dict[str, Any] = {}
+    metadata: ChunkMetadata
