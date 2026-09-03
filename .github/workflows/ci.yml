@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLAMA_PARSE_API_KEY: dummy-ci-key
+      # Runners have no GPU: skip torch's CUDA/cuDNN wheels (multi-GB) and pull
+      # the CPU-only build instead. Local/prod installs are unaffected since
+      # this only applies when the env var is set.
+      UV_TORCH_BACKEND: cpu
     steps:
       - uses: actions/checkout@v5
 
