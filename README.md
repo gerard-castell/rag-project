@@ -81,44 +81,14 @@ Other useful targets: `make down`, `make restart`, `make logs` / `make logs-api`
 
 ## Environment variables
 
-Set in a `.env` file at the repo root (loaded by both `uv run` and the `api` service
-via `env_file: .env` in `docker-compose.yml`). No `.env.example` currently ships in
-the repo — the table below is the full set of settings from `src/core/settings.py`.
-
-| Variable | Required | Default | Notes |
-|---|---|---|---|
-| `LLAMA_PARSE_API_KEY` | **Yes** | — | LlamaParse API key, used for PDF parsing |
-| `QDRANT_URL` | No | `http://localhost:6333` | Overridden to `http://qdrant:6333` inside Docker Compose |
-| `COLLECTION_NAME` | No | `knowledge_base` | Qdrant collection name |
-| `UPLOAD_DIR` | No | `temp_uploads` | Where uploaded PDFs are staged |
-| `MODELS_CACHE_DIR` | No | `models_cache` | fastembed/sentence-transformers cache |
-| `CHUNK_SIZE` | No | `800` | Text splitter chunk size |
-| `CHUNK_OVERLAP` | No | `100` | Text splitter chunk overlap |
-| `DENSE_MODEL_NAME` | No | `BAAI/bge-m3` | Dense embedding model |
-| `SPARSE_MODEL_NAME` | No | `prithivida/Splade_PP_en_v1` | Sparse (SPLADE) embedding model |
-| `EMBEDDING_BATCH_SIZE` | No | `8` | Batch size for embedding generation |
-| `INGESTION_BATCH_SIZE` | No | `32` | Batch size for Qdrant upserts |
-| `SPARSE_MODEL_THREADS` | No | `4` | ONNX runtime threads for the sparse model |
-| `RERANK_MODEL_NAME` | No | `BAAI/bge-reranker-v2-m3` | Configured but not yet used (see note above) |
-| `LLAMA_CPP_URL` | No | `http://localhost:8080` | Overridden to `http://llama-cpp:8080` inside Docker Compose |
-| `LLAMA_CPP_MODEL_NAME` | No | `gemma-4-E4B-it-Q4_K_M` | Reported back in `/chat` responses |
-| `LLAMA_CONTAINER_NAME` | No | `llama-cpp-gpu` | Docker container name the VRAMScheduler starts/stops |
-| `LLAMA_IDLE_TIMEOUT_SECONDS` | No | `300` | Seconds of chat inactivity before the llama.cpp container is stopped |
-| `DEFAULT_SEARCH_LIMIT` | No | `5` | Default `/search` result count |
-| `RETRIEVAL_LIMIT` | No | `15` | Chunks retrieved for `/chat` context |
-| `PREFETCH_MULTIPLIER` | No | `2` | Multiplier applied to each hybrid-search prefetch leg |
+Copy [`.env.example`](./.env.example) to `.env` and set `LLAMA_PARSE_API_KEY` — every
+other setting has a working default. `.env.example` documents the full list.
 
 ## Endpoint reference
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Liveness check; also reports the detected GPU/CPU device |
-| `POST` | `/ingest` | Upload a PDF (`multipart/form-data`); returns `202` and queues background parsing + embedding + upsert into Qdrant |
-| `POST` | `/search` | Hybrid (dense + sparse, RRF-fused) vector search over ingested documents |
-| `POST` | `/chat` | Hybrid search + context-grounded completion via the llama.cpp container |
-
-Full request/response schemas are available at `/docs` (Swagger UI) once the API is
-running.
+Four endpoints — `GET /health`, `POST /ingest`, `POST /search`, `POST /chat`. See
+[`docs/api.md`](./docs/api.md) for a written summary, or `/docs` (Swagger UI) for
+full request/response schemas once the API is running.
 
 ## GPU / VRAM constraint (and the VRAMScheduler)
 
