@@ -85,3 +85,27 @@ watcher is started/stopped via the FastAPI lifespan in `src/main.py`.
 - Double quotes, 88-char line length
 - No multiline docstrings/comments unless critical (e.g. explaining a non-obvious invariant or bug workaround); prefer a single-line docstring
 - When addressing PR review feedback, follow the specific guidance left in each comment rather than a generic fix
+
+## Git Conventions
+
+Run `make hooks` once per clone to enable local checks (commit-msg format, branch name warning).
+
+**Commits & PR titles** — Conventional Commits, no period at the end:
+```
+<type>(<scope>): <short imperative description>
+```
+`type` is one of `feat fix docs chore refactor perf test ci build`. `scope` is optional, lowercase, names the affected area (e.g. `api`, `ingestion`, `frontend`). Reference the issue in the body, not the subject:
+```
+fix(ingestion): handle empty pdf uploads
+
+Closes #34
+```
+A PR title must match this same format — it's checked in CI (`.github/workflows/pr-title.yml`) and becomes the squash-merge commit message.
+
+**Branches**:
+```
+<type>/<issue-number>-<short-slug>
+```
+e.g. `feat/34-add-health-endpoint`, `fix/47-search-timeout`. Same `type` list as commits.
+
+When asked to create a commit, branch, or PR, follow this convention without being re-told.

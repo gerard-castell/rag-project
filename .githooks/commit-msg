@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Enforce Conventional Commits: type(scope): description
+#
+# Enable once per clone with: make hooks
+set -euo pipefail
+
+commit_msg_file="$1"
+subject="$(head -n1 "$commit_msg_file")"
+
+# Skip merge commits and fixup/squash commits.
+if [[ "$subject" =~ ^(Merge|Revert|fixup!|squash!) ]]; then
+    exit 0
+fi
+
+pattern='^(feat|fix|docs|chore|refactor|perf|test|ci|build)(\([a-z0-9_.-]+\))?!?: [a-z].+[^.]$'
+
+if ! [[ "$subject" =~ $pattern ]]; then
+    cat <<EOF >&2
+Commit message rejected: "$subject"
+
+Expected Conventional Commits format:
+  <type>(<scope>): <short imperative description>
+
+  type:  feat | fix | docs | chore | refactor | perf | test | ci | build
+  scope: optional, lowercase (e.g. api, ingestion, ci)
+
+Examples:
+  feat(api): add health endpoint
+  fix(ingestion): handle empty pdf uploads
+
+Reference an issue in the body, not the subject:
+  Refs #34
+  Closes #34
+EOF
+    exit 1
+fi
+
+exit 0
