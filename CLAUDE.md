@@ -84,6 +84,7 @@ watcher is started/stopped via the FastAPI lifespan in `src/main.py`.
 - mypy strict mode — all functions must be typed; `disallow_any_explicit = true`
 - Double quotes, 88-char line length
 - No multiline docstrings/comments unless critical (e.g. explaining a non-obvious invariant or bug workaround); prefer a single-line docstring
+- Inline comments only when strictly necessary (e.g. a non-obvious invariant, workaround, or "why" that isn't clear from the code itself) — do not restate what the code already says, in any file type (code, YAML, config, etc.)
 - When addressing PR review feedback, follow the specific guidance left in each comment rather than a generic fix
 
 ## Git Conventions
