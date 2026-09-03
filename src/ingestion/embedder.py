@@ -12,13 +12,7 @@ from src.core.settings import settings
 
 
 class LocalEmbedder:
-    """Class to generate embeddings ensuring GPU usage for both Dense and Sparse models.
-
-    Models are loaded lazily via `load()` and released via `unload()` so that
-    callers can time-share GPU memory with other models (see
-    `VRAMScheduler.schedule_embedding`). Use `generate()` only from within
-    that context; calling it before `load()` raises `RuntimeError`.
-    """
+    """Generates dense/sparse embeddings; requires `load()` before `generate()`."""
 
     def __init__(self) -> None:
         self.device = "cpu"

@@ -21,11 +21,7 @@ def test_search_validation(client: Any) -> None:
 
 
 def test_search_returns_200_with_stubbed_embedder(client: Any) -> None:
-    """POST /search loads the embedder via the VRAM scheduler and returns 200.
-
-    Regression test for the embedder being used outside schedule_embedding(),
-    which previously made every /search request fail with a 500.
-    """
+    """Regression test: /search loads the embedder via VRAMScheduler and returns 200."""
     stub_embedder = MagicMock()
     stub_embedder.generate.return_value = [
         {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
