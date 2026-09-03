@@ -5,8 +5,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN uv sync --no-dev --no-cache
+COPY pyproject.toml uv.lock .
+RUN uv sync --no-dev --no-cache --locked
 
 # Stage 2 — runtime: slim Python image
 # PyTorch >=2.6 and onnxruntime-gpu >=1.24 bundle their own CUDA runtime libraries.

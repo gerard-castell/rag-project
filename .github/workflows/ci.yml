@@ -39,7 +39,11 @@ jobs:
             --no-install-package nvidia-nvjitlink-cu12 --no-install-package nvidia-nvshmem-cu12 \
             --no-install-package nvidia-nvtx-cu12
           uv pip install "torch>=2.10.0" --index-url https://download.pytorch.org/whl/cpu
-          uv pip install onnxruntime
+          # --no-config: pyproject.toml's override-dependencies drops plain
+          # "onnxruntime" everywhere (it would shadow onnxruntime-gpu's CUDA
+          # provider), which also blocks this direct install unless project
+          # config discovery is skipped for this command.
+          uv pip install onnxruntime --no-config
 
       - name: Ruff check
         run: uv run --no-sync ruff check .
