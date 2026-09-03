@@ -34,7 +34,23 @@ class VRAMScheduler:
         self._idle_timeout = idle_timeout_seconds
         self._last_used: float = 0.0
         self._idle_task: asyncio.Task[None] | None = None
-        self._docker = docker.from_env()
+        self._docker: docker.DockerClient | None = None
+        self._docker_unavailable = False
+
+    @property
+    def _client(self) -> docker.DockerClient | None:
+        """Lazily connect to Docker, warning once and disabling on failure."""
+        if self._docker is None and not self._docker_unavailable:
+            try:
+                self._docker = docker.from_env()
+            except docker.errors.DockerException as exc:
+                self._docker_unavailable = True
+                logger.warning(
+                    "Docker daemon unavailable, container lifecycle management "
+                    "disabled: %s",
+                    exc,
+                )
+        return self._docker
 
     async def start(self) -> None:
         """Start background idle watcher. Call once from app lifespan."""
@@ -49,7 +65,8 @@ class VRAMScheduler:
             self._idle_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._idle_task
-        self._docker.close()
+        if self._docker is not None:
+            self._docker.close()
         logger.info("VRAMScheduler stopped.")
 
     async def _idle_watcher(self) -> None:
@@ -70,8 +87,11 @@ class VRAMScheduler:
 
     def _stop_container(self) -> None:
         """Stop the llama-cpp Docker container (blocking, run via to_thread)."""
+        client = self._client
+        if client is None:
+            return
         try:
-            container = self._docker.containers.get(self._container_name)
+            container = client.containers.get(self._container_name)
             if container.status == "running":
                 container.stop(timeout=10)
                 logger.info(
@@ -84,7 +104,10 @@ class VRAMScheduler:
 
     def _start_container(self) -> None:
         """Start the llama-cpp Docker container (blocking, run via to_thread)."""
-        container = self._docker.containers.get(self._container_name)
+        client = self._client
+        if client is None:
+            return
+        container = client.containers.get(self._container_name)
         if container.status != "running":
             container.start()
             logger.info("Container '%s' started.", self._container_name)

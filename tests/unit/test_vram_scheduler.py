@@ -3,6 +3,7 @@
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import docker.errors
 import pytest
 
 from src.core.vram_scheduler import VRAMScheduler
@@ -19,16 +20,13 @@ def mock_docker_client():
 
 
 @pytest.fixture
-def scheduler(mock_docker_client):
-    """Return a VRAMScheduler with a mocked Docker client."""
-    docker_client, _ = mock_docker_client
-    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
-        s = VRAMScheduler(
-            container_name="llama-cpp-gpu",
-            llama_cpp_url="http://localhost:8080",
-            idle_timeout_seconds=300,
-        )
-    return s
+def scheduler():
+    """Return a VRAMScheduler with no Docker client resolved yet."""
+    return VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=300,
+    )
 
 
 async def test_schedule_generation_starts_stopped_container(mock_docker_client):
@@ -36,14 +34,16 @@ async def test_schedule_generation_starts_stopped_container(mock_docker_client):
     docker_client, container = mock_docker_client
     container.status = "exited"
 
-    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
-        s = VRAMScheduler(
-            container_name="llama-cpp-gpu",
-            llama_cpp_url="http://localhost:8080",
-            idle_timeout_seconds=300,
-        )
+    s = VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=300,
+    )
 
-    with patch.object(s, "_wait_until_ready", new_callable=AsyncMock):
+    with (
+        patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client),
+        patch.object(s, "_wait_until_ready", new_callable=AsyncMock),
+    ):
         async with s.schedule_generation():
             pass
 
@@ -55,14 +55,16 @@ async def test_schedule_generation_skips_start_when_already_running(mock_docker_
     docker_client, container = mock_docker_client
     container.status = "running"
 
-    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
-        s = VRAMScheduler(
-            container_name="llama-cpp-gpu",
-            llama_cpp_url="http://localhost:8080",
-            idle_timeout_seconds=300,
-        )
+    s = VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=300,
+    )
 
-    with patch.object(s, "_wait_until_ready", new_callable=AsyncMock):
+    with (
+        patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client),
+        patch.object(s, "_wait_until_ready", new_callable=AsyncMock),
+    ):
         async with s.schedule_generation():
             pass
 
@@ -74,15 +76,15 @@ async def test_check_and_stop_if_idle_stops_container(mock_docker_client):
     docker_client, container = mock_docker_client
     container.status = "running"
 
-    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
-        s = VRAMScheduler(
-            container_name="llama-cpp-gpu",
-            llama_cpp_url="http://localhost:8080",
-            idle_timeout_seconds=1,
-        )
+    s = VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=1,
+    )
 
     s._last_used = time.monotonic() - 2  # 2 s ago, timeout is 1 s
-    await s._check_and_stop_if_idle()
+    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
+        await s._check_and_stop_if_idle()
 
     container.stop.assert_called_once_with(timeout=10)
     assert s._last_used == 0.0
@@ -92,15 +94,15 @@ async def test_check_and_stop_if_idle_does_nothing_when_not_idle(mock_docker_cli
     """Leave container running when idle timeout has not elapsed."""
     docker_client, container = mock_docker_client
 
-    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
-        s = VRAMScheduler(
-            container_name="llama-cpp-gpu",
-            llama_cpp_url="http://localhost:8080",
-            idle_timeout_seconds=300,
-        )
+    s = VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=300,
+    )
 
     s._last_used = time.monotonic()  # just used
-    await s._check_and_stop_if_idle()
+    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
+        await s._check_and_stop_if_idle()
 
     container.stop.assert_not_called()
 
@@ -108,5 +110,31 @@ async def test_check_and_stop_if_idle_does_nothing_when_not_idle(mock_docker_cli
 async def test_check_and_stop_if_idle_does_nothing_when_never_used(scheduler):
     """Leave container alone when _last_used is 0.0 (llama.cpp never called)."""
     scheduler._last_used = 0.0
-    await scheduler._check_and_stop_if_idle()
-    scheduler._docker.containers.get.assert_not_called()
+    with patch("src.core.vram_scheduler.docker.from_env") as mock_from_env:
+        await scheduler._check_and_stop_if_idle()
+
+    mock_from_env.assert_not_called()
+
+
+async def test_construction_does_not_touch_docker():
+    """Constructing a scheduler must not open a Docker connection."""
+    with patch("src.core.vram_scheduler.docker.from_env") as mock_from_env:
+        VRAMScheduler(
+            container_name="llama-cpp-gpu",
+            llama_cpp_url="http://localhost:8080",
+            idle_timeout_seconds=300,
+        )
+
+    mock_from_env.assert_not_called()
+
+
+def test_client_property_returns_none_when_docker_unavailable(scheduler):
+    """Missing Docker daemon disables container lifecycle management gracefully."""
+    with patch(
+        "src.core.vram_scheduler.docker.from_env",
+        side_effect=docker.errors.DockerException("no daemon"),
+    ) as mock_from_env:
+        assert scheduler._client is None
+        assert scheduler._client is None
+
+    mock_from_env.assert_called_once()
