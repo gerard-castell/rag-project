@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send } from "lucide-react";
+import { MessageSquare, Send } from "lucide-react";
 import { chat, ModelWarmingUpError } from "@/lib/api";
 import { Doc } from "./AppShell";
+import PageHeader from "./PageHeader";
 
 interface Message {
   role: "user" | "assistant";
@@ -63,24 +64,28 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
 
   return (
     <>
-      {/* Header */}
-      <div className="px-8 py-6 border-b border-rim bg-surface">
-        <h1 className="text-2xl font-serif font-bold text-ink">Chat</h1>
-        <p className="text-sm text-ink-subtle mt-1">
-          {healthOk ? "Backend ready" : "Backend unavailable"}
-          {activeDoc ? ` · Chatting with: ${activeDoc.source}` : " · All documents"}
-        </p>
-      </div>
+      <PageHeader
+        icon={MessageSquare}
+        title="Chat"
+        subtitle={
+          activeDoc ? `Chatting with: ${activeDoc.source}` : "All documents"
+        }
+      />
 
       {/* Messages */}
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="polite"
         className="flex-1 overflow-auto p-8 space-y-6 max-w-2xl mx-auto w-full"
       >
         {messages.length === 0 && (
-          <div className="text-center text-ink-subtle py-12">
-            <p className="text-lg">Upload a PDF to start chatting</p>
-            <p className="text-sm mt-2">
+          <div className="flex flex-col items-center text-center py-16">
+            <div className="w-16 h-16 rounded-full bg-amber-soft flex items-center justify-center mb-4">
+              <MessageSquare className="w-7 h-7 text-amber-dark" strokeWidth={1.5} />
+            </div>
+            <p className="text-ink font-medium">Upload a PDF to start chatting</p>
+            <p className="text-sm text-ink-subtle mt-1">
               Ask questions about your documents and get grounded answers
             </p>
           </div>
@@ -94,11 +99,11 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
             }`}
           >
             <div
-              className={`max-w-sm ${
+              className={`max-w-sm px-4 py-3 ${
                 msg.role === "user"
-                  ? "bg-ink text-white rounded-3xl rounded-br-lg"
-                  : "bg-surface border border-rim rounded-3xl rounded-bl-lg"
-              } px-4 py-3`}
+                  ? "bg-ink text-white rounded-3xl rounded-br-lg shadow-[var(--shadow-card)]"
+                  : "bg-surface border border-rim rounded-3xl rounded-bl-lg shadow-[var(--shadow-card)]"
+              }`}
             >
               <p className="text-sm leading-relaxed">{msg.content}</p>
             </div>
@@ -106,7 +111,10 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
         ))}
 
         {loading && (
-          <div className="flex gap-1 animate-fade-up">
+          <div
+            className="flex gap-1 px-4 py-3 w-fit rounded-3xl rounded-bl-lg bg-surface border border-rim animate-fade-up"
+            aria-label="Assistant is typing"
+          >
             <div
               className="w-2 h-2 rounded-full bg-amber animate-bounce-dot"
               style={{ animationDelay: "0s" }}
@@ -123,7 +131,7 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
         )}
 
         {warmingUp && (
-          <div className="p-4 bg-amber/10 text-amber rounded-lg text-sm">
+          <div className="p-4 bg-amber-soft text-amber-dark rounded-lg text-sm">
             The model is warming up after being idle (cold start can take up
             to two minutes). Please retry in a moment.
           </div>
@@ -150,15 +158,17 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
                 }
               }}
               placeholder="Ask a question..."
+              aria-label="Chat message"
               disabled={loading || !healthOk}
-              className="flex-1 px-4 py-2 rounded-lg border border-rim bg-bg-subtle text-ink placeholder-ink-subtle focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 rounded-full border border-rim bg-bg-subtle text-ink placeholder-ink-subtle focus:outline-none focus:ring-2 focus:ring-amber focus:border-transparent disabled:opacity-50 transition-shadow"
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || loading || !healthOk}
-              className="px-4 py-2 rounded-lg bg-amber text-white hover:bg-amber-dark disabled:opacity-50 transition-colors"
+              aria-label="Send message"
+              className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-amber text-white shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-95 disabled:opacity-50 disabled:shadow-none disabled:active:scale-100 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-dark"
             >
-              <Send className="w-5 h-5" />
+              <Send className="w-4 h-4" />
             </button>
           </div>
         </div>

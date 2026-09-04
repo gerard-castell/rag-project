@@ -11,9 +11,12 @@ export type { Doc };
 
 type ActiveView = "documents" | "search" | "chat";
 
+const HEALTH_POLL_MS = 15000;
+
 export default function AppShell() {
   const [activeView, setActiveView] = useState<ActiveView>("documents");
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -24,13 +27,19 @@ export default function AppShell() {
       .then((fetched) => setDocs(fetched))
       .catch(() => {
         // Keep the previously loaded list if the backend is unreachable.
-      });
+      })
+      .finally(() => setDocsLoading(false));
   }, []);
 
   useEffect(() => {
-    health()
-      .then(() => setHealthOk(true))
-      .catch(() => setHealthOk(false));
+    const checkHealth = () => {
+      health()
+        .then(() => setHealthOk(true))
+        .catch(() => setHealthOk(false));
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, HEALTH_POLL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -60,12 +69,18 @@ export default function AppShell() {
         collapsed={collapsed}
         onToggle={() => setCollapsed(!collapsed)}
         docs={docs}
+        onSelectDoc={(docId) => {
+          setActiveDocId(docId);
+          setActiveView("documents");
+        }}
+        healthOk={healthOk}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden bg-surface">
         {activeView === "documents" && (
           <DocumentsView
             docs={docs}
+            docsLoading={docsLoading}
             activeDocId={activeDocId}
             uploadOpen={uploadOpen}
             onUploadOpen={() => setUploadOpen(true)}
