@@ -6,6 +6,7 @@ import Sidebar from "./Sidebar";
 import DocumentsView from "./DocumentsView";
 import SearchView from "./SearchPanel";
 import ChatView from "./ChatPanel";
+import UploadModal from "./UploadModal";
 
 export type { Doc };
 
@@ -18,7 +19,6 @@ export default function AppShell() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [healthOk, setHealthOk] = useState(false);
 
@@ -66,8 +66,6 @@ export default function AppShell() {
       <Sidebar
         activeView={activeView}
         onNavigate={setActiveView}
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(!collapsed)}
         docs={docs}
         onSelectDoc={(docId) => {
           setActiveDocId(docId);
@@ -82,10 +80,7 @@ export default function AppShell() {
             docs={docs}
             docsLoading={docsLoading}
             activeDocId={activeDocId}
-            uploadOpen={uploadOpen}
             onUploadOpen={() => setUploadOpen(true)}
-            onUploadClose={() => setUploadOpen(false)}
-            onUploadSuccess={handleUploadSuccess}
             onSelectDoc={(docId) =>
               setActiveDocId((prev) => (prev === docId ? null : docId))
             }
@@ -93,7 +88,14 @@ export default function AppShell() {
           />
         )}
 
-        {activeView === "search" && <SearchView activeDoc={activeDoc} />}
+        {activeView === "search" && (
+          <SearchView
+            docs={docs}
+            activeDoc={activeDoc}
+            onSelectDoc={setActiveDocId}
+            onUploadOpen={() => setUploadOpen(true)}
+          />
+        )}
 
         {activeView === "chat" && (
           // Remount on doc switch so an earlier answer grounded in a
@@ -101,10 +103,19 @@ export default function AppShell() {
           <ChatView
             key={activeDocId ?? "all"}
             healthOk={healthOk}
+            docs={docs}
             activeDoc={activeDoc}
+            onSelectDoc={setActiveDocId}
+            onUploadOpen={() => setUploadOpen(true)}
           />
         )}
       </main>
+
+      <UploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onSuccess={handleUploadSuccess}
+      />
     </div>
   );
 }

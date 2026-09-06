@@ -2,16 +2,12 @@ import { FileText, Plus } from "lucide-react";
 import { Doc } from "./AppShell";
 import DocumentCard from "./DocumentCard";
 import PageHeader from "./PageHeader";
-import UploadModal from "./UploadModal";
 
 interface DocumentsViewProps {
   docs: Doc[];
   docsLoading: boolean;
   activeDocId: string | null;
-  uploadOpen: boolean;
   onUploadOpen: () => void;
-  onUploadClose: () => void;
-  onUploadSuccess: () => void;
   onSelectDoc: (docId: string) => void;
   onDeleteDoc: (docId: string) => void;
 }
@@ -20,10 +16,7 @@ export default function DocumentsView({
   docs,
   docsLoading,
   activeDocId,
-  uploadOpen,
   onUploadOpen,
-  onUploadClose,
-  onUploadSuccess,
   onSelectDoc,
   onDeleteDoc,
 }: DocumentsViewProps) {
@@ -102,12 +95,6 @@ export default function DocumentsView({
           </div>
         )}
       </div>
-
-      <UploadModal
-        open={uploadOpen}
-        onClose={onUploadClose}
-        onSuccess={onUploadSuccess}
-      />
     </>
   );
 }

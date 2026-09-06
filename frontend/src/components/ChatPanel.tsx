@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, Send } from "lucide-react";
+import { MessageSquare, Plus, Send } from "lucide-react";
 import { chat, ModelWarmingUpError } from "@/lib/api";
 import { Doc } from "./AppShell";
+import DocScopeSelector from "./DocScopeSelector";
+import Markdown from "./Markdown";
 import PageHeader from "./PageHeader";
 
 interface Message {
@@ -13,10 +15,20 @@ interface Message {
 
 interface ChatPanelProps {
   healthOk: boolean;
+  docs: Doc[];
   activeDoc: Doc | null;
+  onSelectDoc: (docId: string | null) => void;
+  onUploadOpen: () => void;
 }
 
-export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
+export default function ChatPanel({
+  healthOk,
+  docs,
+  activeDoc,
+  onSelectDoc,
+  onUploadOpen,
+}: ChatPanelProps) {
+  const hasDocs = docs.length > 0;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,6 +82,15 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
         subtitle={
           activeDoc ? `Chatting with: ${activeDoc.source}` : "All documents"
         }
+        action={
+          hasDocs && (
+            <DocScopeSelector
+              docs={docs}
+              activeDoc={activeDoc}
+              onSelect={onSelectDoc}
+            />
+          )
+        }
       />
 
       {/* Messages */}
@@ -79,14 +100,35 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
         aria-live="polite"
         className="flex-1 overflow-auto p-8 space-y-6 max-w-2xl mx-auto w-full"
       >
-        {messages.length === 0 && (
+        {messages.length === 0 && !hasDocs && (
           <div className="flex flex-col items-center text-center py-16">
             <div className="w-16 h-16 rounded-full bg-amber-soft flex items-center justify-center mb-4">
               <MessageSquare className="w-7 h-7 text-amber-dark" strokeWidth={1.5} />
             </div>
             <p className="text-ink font-medium">Upload a PDF to start chatting</p>
-            <p className="text-sm text-ink-subtle mt-1">
+            <p className="text-sm text-ink-subtle mt-1 mb-5">
               Ask questions about your documents and get grounded answers
+            </p>
+            <button
+              onClick={onUploadOpen}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber text-white font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Upload your first PDF
+            </button>
+          </div>
+        )}
+
+        {messages.length === 0 && hasDocs && (
+          <div className="flex flex-col items-center text-center py-16">
+            <div className="w-16 h-16 rounded-full bg-amber-soft flex items-center justify-center mb-4">
+              <MessageSquare className="w-7 h-7 text-amber-dark" strokeWidth={1.5} />
+            </div>
+            <p className="text-ink font-medium">Ask a question to get started</p>
+            <p className="text-sm text-ink-subtle mt-1">
+              {activeDoc
+                ? `Grounded in "${activeDoc.source}"`
+                : "Grounded in all your uploaded documents"}
             </p>
           </div>
         )}
@@ -105,7 +147,11 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
                   : "bg-surface border border-rim rounded-3xl rounded-bl-lg shadow-[var(--shadow-card)]"
               }`}
             >
-              <p className="text-sm leading-relaxed">{msg.content}</p>
+              {msg.role === "assistant" ? (
+                <Markdown content={msg.content} />
+              ) : (
+                <p className="text-sm leading-relaxed">{msg.content}</p>
+              )}
             </div>
           </div>
         ))}
@@ -145,7 +191,7 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
       </div>
 
       {/* Input */}
-      <div className="px-8 py-6 border-t border-rim bg-surface">
+      <div className="px-8 py-6 bg-surface">
         <div className="max-w-2xl mx-auto">
           <div className="flex gap-3">
             <input
@@ -157,14 +203,14 @@ export default function ChatPanel({ healthOk, activeDoc }: ChatPanelProps) {
                   handleSend();
                 }
               }}
-              placeholder="Ask a question..."
+              placeholder={hasDocs ? "Ask a question..." : "Upload a PDF to start chatting"}
               aria-label="Chat message"
-              disabled={loading || !healthOk}
+              disabled={loading || !healthOk || !hasDocs}
               className="flex-1 px-4 py-2.5 rounded-full border border-rim bg-bg-subtle text-ink placeholder-ink-subtle focus:outline-none focus:ring-2 focus:ring-amber focus:border-transparent disabled:opacity-50 transition-shadow"
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || loading || !healthOk}
+              disabled={!input.trim() || loading || !healthOk || !hasDocs}
               aria-label="Send message"
               className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-amber text-white shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-95 disabled:opacity-50 disabled:shadow-none disabled:active:scale-100 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-dark"
             >

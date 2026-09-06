@@ -1,16 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Search as SearchIcon } from "lucide-react";
+import { Plus, Search as SearchIcon } from "lucide-react";
 import { search, SearchResult } from "@/lib/api";
 import { Doc } from "./AppShell";
+import DocScopeSelector from "./DocScopeSelector";
 import PageHeader from "./PageHeader";
 
 interface SearchPanelProps {
+  docs: Doc[];
   activeDoc: Doc | null;
+  onSelectDoc: (docId: string | null) => void;
+  onUploadOpen: () => void;
 }
 
-export default function SearchPanel({ activeDoc }: SearchPanelProps) {
+export default function SearchPanel({
+  docs,
+  activeDoc,
+  onSelectDoc,
+  onUploadOpen,
+}: SearchPanelProps) {
+  const hasDocs = docs.length > 0;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,12 +53,25 @@ export default function SearchPanel({ activeDoc }: SearchPanelProps) {
         subtitle={
           activeDoc ? `Scoped to: ${activeDoc.source}` : "Searching all documents"
         }
+        action={
+          hasDocs && (
+            <DocScopeSelector
+              docs={docs}
+              activeDoc={activeDoc}
+              onSelect={onSelectDoc}
+            />
+          )
+        }
       />
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-8">
         {/* Search form */}
         <div className="mb-8 max-w-2xl">
+          <p className="mb-3 text-sm text-ink-subtle">
+            Shows the exact passages from your documents that match your
+            query, ranked by relevance.
+          </p>
           <div className="flex gap-3">
             <div className="flex-1 relative">
               <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-subtle pointer-events-none" />
@@ -129,7 +152,26 @@ export default function SearchPanel({ activeDoc }: SearchPanelProps) {
         )}
 
         {/* Empty state */}
-        {!loading && results.length === 0 && !error && (
+        {!loading && results.length === 0 && !error && !hasDocs && (
+          <div className="flex flex-col items-center text-center py-16">
+            <div className="w-16 h-16 rounded-full bg-amber-soft flex items-center justify-center mb-4">
+              <SearchIcon className="w-7 h-7 text-amber-dark" strokeWidth={1.5} />
+            </div>
+            <p className="text-ink font-medium">Upload a PDF to start searching</p>
+            <p className="text-sm text-ink-subtle mt-1 mb-5">
+              Search across your documents once one is indexed
+            </p>
+            <button
+              onClick={onUploadOpen}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber text-white font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Upload your first PDF
+            </button>
+          </div>
+        )}
+
+        {!loading && results.length === 0 && !error && hasDocs && (
           <div className="flex flex-col items-center text-center py-16">
             <div className="w-16 h-16 rounded-full bg-amber-soft flex items-center justify-center mb-4">
               <SearchIcon className="w-7 h-7 text-amber-dark" strokeWidth={1.5} />
@@ -137,11 +179,11 @@ export default function SearchPanel({ activeDoc }: SearchPanelProps) {
             <p className="text-ink font-medium">
               {query.trim() ? "No results found" : "Start searching to see results"}
             </p>
-            {query.trim() && (
-              <p className="text-sm text-ink-subtle mt-1">
-                Try a different phrase, or check the document scope above.
-              </p>
-            )}
+            <p className="text-sm text-ink-subtle mt-1">
+              {query.trim()
+                ? "Try a different phrase, or check the document scope above."
+                : "Type a word or phrase to find matching passages in your documents."}
+            </p>
           </div>
         )}
       </div>

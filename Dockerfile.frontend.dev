@@ -1,0 +1,11 @@
+# Dev image for the frontend: runs `next dev` with source bind-mounted for hot reload.
+FROM node:24-alpine
+
+WORKDIR /app
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
