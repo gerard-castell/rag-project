@@ -72,3 +72,20 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+  # Dev variant: `next dev` with hot reload, source bind-mounted from ./frontend.
+  # Runs standalone (no depends_on) so it can be started without the backend stack.
+  frontend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    container_name: rag-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://api:8000
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
