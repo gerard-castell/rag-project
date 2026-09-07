@@ -2,7 +2,7 @@
 
 from qdrant_client import models
 
-from src.core.exceptions import RAGError, VectorDBError
+from src.core.exceptions import EmbeddingGenerationError, VectorDBError
 from src.core.settings import settings
 from src.core.vram_scheduler import VRAMScheduler
 from src.ingestion.database import VectorDB
@@ -22,7 +22,7 @@ async def perform_hybrid_search(
         async with vram_scheduler.schedule_embedding(embedder):
             vector_data = embedder.generate([request.query])[0]
     except Exception as e:
-        raise RAGError(f"Embedding generation failed: {e}") from e
+        raise EmbeddingGenerationError(f"Embedding generation failed: {e}") from e
 
     prefetch_limit = request.limit * settings.prefetch_multiplier
 
