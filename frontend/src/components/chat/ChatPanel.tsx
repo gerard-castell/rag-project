@@ -1,33 +1,24 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { MessageSquare, Plus, Send } from "lucide-react";
 import { chat, ModelWarmingUpError } from "@/lib/api";
-import { Doc } from "./AppShell";
-import DocScopeSelector from "./DocScopeSelector";
-import Markdown from "./Markdown";
-import PageHeader from "./PageHeader";
+import { useDocuments } from "@/contexts/documents-context";
+import { useHealth } from "@/contexts/health-context";
+import { useUploadModal } from "@/contexts/upload-modal-context";
+import DocScopeSelector from "@/components/shared/DocScopeSelector";
+import Markdown from "@/components/shared/Markdown";
+import PageHeader from "@/components/shared/PageHeader";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-interface ChatPanelProps {
-  healthOk: boolean;
-  docs: Doc[];
-  activeDoc: Doc | null;
-  onSelectDoc: (docId: string | null) => void;
-  onUploadOpen: () => void;
-}
-
-export default function ChatPanel({
-  healthOk,
-  docs,
-  activeDoc,
-  onSelectDoc,
-  onUploadOpen,
-}: ChatPanelProps) {
+export default function ChatPanel() {
+  const { docs, activeDoc, selectDoc } = useDocuments();
+  const healthOk = useHealth();
+  const { open: openUpload } = useUploadModal();
   const hasDocs = docs.length > 0;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -42,7 +33,7 @@ export default function ChatPanel({
     }
   }, [messages]);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!input.trim() || loading) return;
 
     const userMessage = input.trim();
@@ -52,26 +43,26 @@ export default function ChatPanel({
     setError(null);
     setWarmingUp(false);
 
-    try {
-      const response = await chat(userMessage, activeDoc?.doc_id);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: response.response },
-      ]);
-    } catch (err) {
-      if (err instanceof ModelWarmingUpError) {
-        setWarmingUp(true);
-      } else {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Chat failed. Ensure documents are uploaded and the backend is running."
-        );
-      }
-      setMessages((prev) => prev.slice(0, -1)); // Remove user message on error
-    } finally {
-      setLoading(false);
-    }
+    chat(userMessage, activeDoc?.doc_id)
+      .then((response) => {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: response.response },
+        ]);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof ModelWarmingUpError) {
+          setWarmingUp(true);
+        } else {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Chat failed. Ensure documents are uploaded and the backend is running."
+          );
+        }
+        setMessages((prev) => prev.slice(0, -1)); // Remove user message on error
+      })
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -87,7 +78,7 @@ export default function ChatPanel({
             <DocScopeSelector
               docs={docs}
               activeDoc={activeDoc}
-              onSelect={onSelectDoc}
+              onSelect={selectDoc}
             />
           )
         }
@@ -110,7 +101,7 @@ export default function ChatPanel({
               Ask questions about your documents and get grounded answers
             </p>
             <button
-              onClick={onUploadOpen}
+              onClick={openUpload}
               className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber text-white font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all"
             >
               <Plus className="w-4 h-4" />

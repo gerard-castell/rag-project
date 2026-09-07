@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Sora, JetBrains_Mono } from "next/font/google";
+import { AppProviders } from "@/contexts/app-providers";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -33,7 +34,7 @@ export default function RootLayout({
       className={`${dmSans.variable} ${sora.variable} ${jetBrainsMono.variable} h-full`}
     >
       <body className="h-full bg-bg text-ink font-sans antialiased">
-        {children}
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
