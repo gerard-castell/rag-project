@@ -23,12 +23,7 @@ jobs:
         with:
           filters: |
             backend:
-              - 'src/**'
-              - 'tests/**'
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - '.python-version'
-              - 'Dockerfile'
+              - 'backend/**'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
@@ -43,6 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLAMA_PARSE_API_KEY: dummy-ci-key
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v7
 
@@ -50,6 +48,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
       # Runners have no GPU: uv.lock pins CUDA torch/onnxruntime-gpu wheels
       # plus ~2.5GB of bundled nvidia-*-cu12/triton libs that CPU CI never

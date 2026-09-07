@@ -71,12 +71,12 @@ fetch-model:
 	fi
 
 lint:
-	uv run ruff check .
-	uv run ruff format --check .
-	uv run mypy src/
+	cd backend && uv run ruff check .
+	cd backend && uv run ruff format --check .
+	cd backend && uv run mypy src/
 
 test:
-	uv run pytest
+	cd backend && uv run pytest
 
 hooks:
 	git config core.hooksPath .githooks

@@ -34,11 +34,11 @@ services:
     restart: unless-stopped
 
   api:
-    build: .
+    build: ./backend
     container_name: rag-api
     ports:
       - "8000:8000"
-    env_file: .env
+    env_file: ./backend/.env
     environment:
       - QDRANT_URL=http://qdrant:6333
       - LLAMA_CPP_URL=http://llama-cpp:8080
