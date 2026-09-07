@@ -77,7 +77,7 @@ make up
 Other useful targets: `make down`, `make restart`, `make logs` / `make logs-api` /
 `make logs-frontend`, `make status`, `make clean` (also removes volumes), `make lint`,
 `make test`. For local (non-Docker) dev: `make frontend-dev`,
-`make frontend-install`, `uv run uvicorn src.main:app --reload`.
+`make frontend-install`, `cd backend && uv run uvicorn src.main:app --reload`.
 
 ## Environment variables
 
@@ -95,7 +95,7 @@ full request/response schemas once the API is running.
 This project is built to run entirely on a single consumer GPU, which is not big
 enough to keep the embedding models and the LLM resident in VRAM at the same time.
 Rather than run everything simultaneously and risk an out-of-memory crash, the
-`api` container includes a `VRAMScheduler` (`src/core/vram_scheduler.py`) that
+`api` container includes a `VRAMScheduler` (`backend/src/core/vram_scheduler.py`) that
 strictly time-shares the GPU:
 
 - A single `asyncio.Lock` serializes all GPU work, so embedding generation and LLM
@@ -136,6 +136,7 @@ once that work lands.
 ## Development
 
 ```bash
+cd backend
 uv run uvicorn src.main:app --reload   # run the API locally (needs Qdrant/llama.cpp reachable)
 uv run pytest                          # run tests
 uv run ruff check . && uv run ruff format . && uv run mypy src/   # lint/type-check

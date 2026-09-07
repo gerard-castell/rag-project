@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
 
   api:
-    build: .
+    build: ./backend
     container_name: rag-api
     ports:
       - "8000:8000"
