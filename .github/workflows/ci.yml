@@ -7,8 +7,36 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    name: Detect changed scope
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'src/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.python-version'
+              - 'Dockerfile'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - 'Dockerfile.frontend'
+              - 'Dockerfile.frontend.dev'
+              - '.github/workflows/ci.yml'
+
   backend:
     name: Backend (lint, type-check, test)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     env:
       LLAMA_PARSE_API_KEY: dummy-ci-key
@@ -59,6 +87,8 @@ jobs:
 
   frontend:
     name: Frontend (type-check, lint)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
