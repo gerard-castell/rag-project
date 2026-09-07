@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("temp_uploads")
     models_cache_dir: Path = Path("models_cache")
 
+    # Max accepted size for a single /ingest upload, in bytes.
+    max_upload_size_bytes: int = 50 * 1024 * 1024
+
     # Text Splitting Configuration
     chunk_size: int = 800
     chunk_overlap: int = 100

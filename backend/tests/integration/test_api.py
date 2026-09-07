@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from src.api.dependencies import get_embedder, get_vector_db, get_vram_scheduler
 from src.core.exceptions import ModelWarmupTimeoutError
+from src.core.settings import settings
 from src.main import app
 from tests.conftest import NoOpVRAMScheduler
 
@@ -78,6 +79,38 @@ def test_ingest_validation(client: Any) -> None:
     )
     assert response.status_code == 400
     assert "Only PDF files are supported." in response.json()["detail"]
+
+
+def test_ingest_sanitizes_path_traversal_filename(client: Any) -> None:
+    """A filename with traversal segments is reduced to its basename, not escaped."""
+    with patch("src.api.routes.ingest.run_ingestion_logic") as mock_run:
+        response = client.post(
+            "/ingest",
+            files={"file": ("../../../etc/evil.pdf", b"%PDF-1.4", "application/pdf")},
+        )
+    assert response.status_code == 202
+    stored_filename = mock_run.call_args.args[2]
+    assert stored_filename == "evil.pdf"
+    assert ".." not in stored_filename and "/" not in stored_filename
+
+
+def test_ingest_rejects_non_pdf_content(client: Any) -> None:
+    """A file named `.pdf` whose content isn't a PDF is rejected on magic bytes."""
+    response = client.post(
+        "/ingest", files={"file": ("fake.pdf", b"not a real pdf", "application/pdf")}
+    )
+    assert response.status_code == 400
+    assert "not a valid PDF" in response.json()["detail"]
+
+
+def test_ingest_rejects_upload_over_max_size(client: Any) -> None:
+    """Uploads larger than the configured limit are rejected with 413."""
+    oversized = b"%PDF-1.4" + b"0" * settings.max_upload_size_bytes
+    response = client.post(
+        "/ingest", files={"file": ("big.pdf", oversized, "application/pdf")}
+    )
+    assert response.status_code == 413
+    assert "exceeds maximum upload size" in response.json()["detail"]
 
 
 def test_list_documents_aggregates_chunks_by_doc_id(client: Any) -> None:
