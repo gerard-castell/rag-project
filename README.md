@@ -81,8 +81,9 @@ Other useful targets: `make down`, `make restart`, `make logs` / `make logs-api`
 
 ## Environment variables
 
-Copy [`.env.example`](./.env.example) to `.env` and set `LLAMA_PARSE_API_KEY` — every
-other setting has a working default. `.env.example` documents the full list.
+Copy [`backend/.env.example`](./backend/.env.example) to `backend/.env` and set
+`LLAMA_PARSE_API_KEY` — every other setting has a working default. `.env.example`
+documents the full list.
 
 ## Endpoint reference
 
