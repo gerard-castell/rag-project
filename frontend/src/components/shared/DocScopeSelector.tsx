@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, FileText } from "lucide-react";
-import { Doc } from "./AppShell";
+import type { Doc } from "@/types/document";
 
 interface DocScopeSelectorProps {
   docs: Doc[];

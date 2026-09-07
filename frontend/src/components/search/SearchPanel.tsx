@@ -2,47 +2,35 @@
 
 import { useState } from "react";
 import { Plus, Search as SearchIcon } from "lucide-react";
-import { search, SearchResult } from "@/lib/api";
-import { Doc } from "./AppShell";
-import DocScopeSelector from "./DocScopeSelector";
-import PageHeader from "./PageHeader";
+import { search } from "@/lib/api";
+import type { SearchResult } from "@/types/api";
+import { useDocuments } from "@/contexts/documents-context";
+import { useUploadModal } from "@/contexts/upload-modal-context";
+import DocScopeSelector from "@/components/shared/DocScopeSelector";
+import PageHeader from "@/components/shared/PageHeader";
 
-interface SearchPanelProps {
-  docs: Doc[];
-  activeDoc: Doc | null;
-  onSelectDoc: (docId: string | null) => void;
-  onUploadOpen: () => void;
-}
-
-export default function SearchPanel({
-  docs,
-  activeDoc,
-  onSelectDoc,
-  onUploadOpen,
-}: SearchPanelProps) {
+export default function SearchPanel() {
+  const { docs, activeDoc, selectDoc } = useDocuments();
+  const { open: openUpload } = useUploadModal();
   const hasDocs = docs.length > 0;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
+  const handleSearch = () => {
     if (!query.trim()) return;
 
     setLoading(true);
     setError(null);
 
-    try {
-      const data = await search(query, 5, activeDoc?.doc_id);
-      setResults(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Search failed. Try again."
-      );
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
+    search(query, 5, activeDoc?.doc_id)
+      .then((data) => setResults(data))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Search failed. Try again.");
+        setResults([]);
+      })
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -58,7 +46,7 @@ export default function SearchPanel({
             <DocScopeSelector
               docs={docs}
               activeDoc={activeDoc}
-              onSelect={onSelectDoc}
+              onSelect={selectDoc}
             />
           )
         }
@@ -138,10 +126,10 @@ export default function SearchPanel({
                   <span className="font-semibold text-amber-dark">
                     {(result.score * 100).toFixed(0)}% match
                   </span>
-                  {result.metadata?.source && (
+                  {result.metadata.source != null && (
                     <span>{result.metadata.source}</span>
                   )}
-                  {result.metadata?.page != null && (
+                  {result.metadata.page != null && (
                     <span>Page {result.metadata.page}</span>
                   )}
                 </div>
@@ -162,7 +150,7 @@ export default function SearchPanel({
               Search across your documents once one is indexed
             </p>
             <button
-              onClick={onUploadOpen}
+              onClick={openUpload}
               className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber text-white font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all"
             >
               <Plus className="w-4 h-4" />

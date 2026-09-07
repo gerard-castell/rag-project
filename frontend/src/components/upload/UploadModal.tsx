@@ -1,18 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ChangeEvent } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Upload, X } from "lucide-react";
-import {
-  getIngestStatus,
-  ingestPDF,
-  type IngestTaskStatus,
-} from "@/lib/api";
-
-interface UploadModalProps {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-}
+import { getIngestStatus, ingestPDF } from "@/lib/api";
+import type { IngestTaskStatus } from "@/types/api";
+import { useDocuments } from "@/contexts/documents-context";
+import { useUploadModal } from "@/contexts/upload-modal-context";
 
 type ItemStatus = "pending" | "uploading" | IngestTaskStatus;
 
@@ -39,11 +32,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export default function UploadModal({
-  open,
-  onClose,
-  onSuccess,
-}: UploadModalProps) {
+export default function UploadModal() {
+  const { refreshDocsSoon } = useDocuments();
+  const { isOpen: open, close: onClose } = useUploadModal();
   const [dragActive, setDragActive] = useState(false);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [running, setRunning] = useState(false);
@@ -88,17 +79,19 @@ export default function UploadModal({
     if (pdfs.length > 0) {
       setItems((prev) => [
         ...prev,
-        ...pdfs.map((file) => ({
-          file,
-          status: "pending" as ItemStatus,
-          progress: 0,
-          error: null,
-        })),
+        ...pdfs.map(
+          (file): UploadItem => ({
+            file,
+            status: "pending",
+            progress: 0,
+            error: null,
+          })
+        ),
       ]);
     }
   };
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDrag = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
@@ -108,14 +101,14 @@ export default function UploadModal({
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     addFiles(e.dataTransfer.files);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) addFiles(e.target.files);
     e.target.value = "";
   };
@@ -130,7 +123,7 @@ export default function UploadModal({
       const { task_id } = await ingestPDF(file);
       updateItem(idx, { status: "queued" });
 
-      while (true) {
+      for (;;) {
         await sleep(POLL_INTERVAL_MS);
         if (cancelledRef.current) return;
 
@@ -142,7 +135,7 @@ export default function UploadModal({
         updateItem(idx, { status: record.status, progress });
 
         if (record.status === "done") {
-          onSuccess();
+          refreshDocsSoon();
           return;
         }
         if (record.status === "failed") {
@@ -164,8 +157,10 @@ export default function UploadModal({
     setRunning(true);
     for (let idx = 0; idx < items.length; idx += 1) {
       if (cancelledRef.current) break;
-      if (items[idx].status !== "pending") continue;
-      await uploadOne(idx, items[idx].file);
+      if (items[idx]?.status !== "pending") continue;
+      const item = items[idx];
+      if (!item) continue;
+      await uploadOne(idx, item.file);
     }
     if (!cancelledRef.current) setRunning(false);
   };
@@ -334,7 +329,7 @@ export default function UploadModal({
             </button>
             {!allSettled && (
               <button
-                onClick={handleUpload}
+                onClick={() => void handleUpload()}
                 disabled={pendingCount === 0 || running}
                 className="flex-1 px-4 py-2 rounded-lg bg-amber text-white font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:shadow-none disabled:active:scale-100 flex items-center justify-center gap-2"
               >

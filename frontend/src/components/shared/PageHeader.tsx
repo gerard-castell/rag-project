@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 interface PageHeaderProps {
   icon: LucideIcon;
   title: string;
-  subtitle?: React.ReactNode;
-  action?: React.ReactNode;
+  subtitle?: ReactNode;
+  action?: ReactNode;
 }
 
 export default function PageHeader({

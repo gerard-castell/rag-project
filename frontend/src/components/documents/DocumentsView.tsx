@@ -1,25 +1,26 @@
+"use client";
+
+import { useState } from "react";
 import { FileText, Plus } from "lucide-react";
-import { Doc } from "./AppShell";
+import { useDocuments } from "@/contexts/documents-context";
+import { useUploadModal } from "@/contexts/upload-modal-context";
+import PageHeader from "@/components/shared/PageHeader";
 import DocumentCard from "./DocumentCard";
-import PageHeader from "./PageHeader";
 
-interface DocumentsViewProps {
-  docs: Doc[];
-  docsLoading: boolean;
-  activeDocId: string | null;
-  onUploadOpen: () => void;
-  onSelectDoc: (docId: string) => void;
-  onDeleteDoc: (docId: string) => void;
-}
+export default function DocumentsView() {
+  const { docs, docsLoading, activeDocId, selectDoc, deleteDoc } = useDocuments();
+  const { open: openUpload } = useUploadModal();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-export default function DocumentsView({
-  docs,
-  docsLoading,
-  activeDocId,
-  onUploadOpen,
-  onSelectDoc,
-  onDeleteDoc,
-}: DocumentsViewProps) {
+  const handleDelete = (docId: string) => {
+    setDeleteError(null);
+    deleteDoc(docId).catch((err: unknown) => {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete document."
+      );
+    });
+  };
+
   return (
     <>
       <PageHeader
@@ -32,7 +33,7 @@ export default function DocumentsView({
         }
         action={
           <button
-            onClick={onUploadOpen}
+            onClick={openUpload}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-amber text-white text-sm font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -43,6 +44,12 @@ export default function DocumentsView({
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-8">
+        {deleteError && (
+          <div className="mb-6 p-4 bg-danger-soft text-danger rounded-lg text-sm">
+            {deleteError}
+          </div>
+        )}
+
         {docsLoading ? (
           <div
             className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-5"
@@ -75,7 +82,7 @@ export default function DocumentsView({
               Upload a PDF to get started with search and grounded chat
             </p>
             <button
-              onClick={onUploadOpen}
+              onClick={openUpload}
               className="px-6 py-2.5 rounded-lg bg-amber text-white font-medium shadow-[var(--shadow-card)] hover:bg-amber-dark hover:shadow-[var(--shadow-card-hover)] active:scale-[0.98] transition-all"
             >
               Upload your first PDF
@@ -88,8 +95,8 @@ export default function DocumentsView({
                 key={doc.doc_id}
                 doc={doc}
                 active={doc.doc_id === activeDocId}
-                onSelect={() => onSelectDoc(doc.doc_id)}
-                onDelete={() => onDeleteDoc(doc.doc_id)}
+                onSelect={() => selectDoc(doc.doc_id === activeDocId ? null : doc.doc_id)}
+                onDelete={() => handleDelete(doc.doc_id)}
               />
             ))}
           </div>

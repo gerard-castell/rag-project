@@ -1,5 +1,5 @@
 import { FileText, X } from "lucide-react";
-import { Doc } from "./AppShell";
+import type { Doc } from "@/types/document";
 
 interface DocumentCardProps {
   doc: Doc;

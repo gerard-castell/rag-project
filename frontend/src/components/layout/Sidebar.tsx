@@ -1,30 +1,24 @@
-import { FileText, Search, MessageSquare } from "lucide-react";
-import { Doc } from "./AppShell";
+import { FileText, Search, MessageSquare, type LucideIcon } from "lucide-react";
+import { useDocuments } from "@/contexts/documents-context";
+import { useHealth } from "@/contexts/health-context";
 
 type ActiveView = "documents" | "search" | "chat";
 
 interface SidebarProps {
   activeView: ActiveView;
   onNavigate: (view: ActiveView) => void;
-  docs: Doc[];
-  onSelectDoc: (docId: string) => void;
-  healthOk: boolean;
 }
 
-const navItems: Array<{ id: ActiveView; icon: typeof FileText; label: string }> =
-  [
-    { id: "documents", icon: FileText, label: "Documents" },
-    { id: "search", icon: Search, label: "Search" },
-    { id: "chat", icon: MessageSquare, label: "Chat" },
-  ];
+const navItems: { id: ActiveView; icon: LucideIcon; label: string }[] = [
+  { id: "documents", icon: FileText, label: "Documents" },
+  { id: "search", icon: Search, label: "Search" },
+  { id: "chat", icon: MessageSquare, label: "Chat" },
+];
 
-export default function Sidebar({
-  activeView,
-  onNavigate,
-  docs,
-  onSelectDoc,
-  healthOk,
-}: SidebarProps) {
+export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
+  const { docs, selectDoc } = useDocuments();
+  const healthOk = useHealth();
+
   return (
     <div className="flex flex-col h-full w-60 bg-surface border-r border-rim">
       {/* Logo */}
@@ -72,7 +66,10 @@ export default function Sidebar({
             {docs.slice(0, 4).map((doc) => (
               <button
                 key={doc.doc_id}
-                onClick={() => onSelectDoc(doc.doc_id)}
+                onClick={() => {
+                  selectDoc(doc.doc_id);
+                  onNavigate("documents");
+                }}
                 title={doc.source}
                 className="w-full flex items-center px-2 py-1.5 text-xs text-ink-muted truncate hover:text-ink hover:bg-bg-subtle rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber"
               >
