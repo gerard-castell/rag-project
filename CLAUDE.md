@@ -87,6 +87,14 @@ watcher is started/stopped via the FastAPI lifespan in `src/main.py`.
 - Inline comments only when strictly necessary (e.g. a non-obvious invariant, workaround, or "why" that isn't clear from the code itself) — do not restate what the code already says, in any file type (code, YAML, config, etc.)
 - When addressing PR review feedback, follow the specific guidance left in each comment rather than a generic fix
 
+## Agent Skills
+
+Skills live in `.agents/skills/` — the single source of truth. Gemini CLI and
+OpenCode both natively treat `.agents/skills/` as an alias, so they need no
+copy of their own. Claude Code only scans `.claude/skills/`, so `.claude/skills`
+is a symlink to `../.agents/skills`. Add new skills under `.agents/skills/`
+only; do not recreate `.agent/`, `.gemini/`, or other per-tool skill folders.
+
 ## Git Conventions
 
 Run `make hooks` once per clone to enable local checks (commit-msg format, branch name warning).
