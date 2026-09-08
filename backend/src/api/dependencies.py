@@ -4,7 +4,6 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
-from qdrant_client import QdrantClient
 
 from src.core.llama_cpp_client import LlamaCppClient
 from src.core.settings import settings
@@ -50,7 +49,6 @@ def get_vram_scheduler() -> VRAMScheduler:
 
 EmbedderDep = Annotated[LocalEmbedder, Depends(get_embedder)]
 VectorDBDep = Annotated[VectorDB, Depends(get_vector_db)]
-QdrantClientDep = Annotated[QdrantClient, Depends(lambda: get_vector_db().client)]
 LlamaCppClientDep = Annotated[LlamaCppClient, Depends(get_llama_client)]
 VRAMSchedulerDep = Annotated[VRAMScheduler, Depends(get_vram_scheduler)]
 TaskStoreDep = Annotated[TaskStore, Depends(get_task_store)]

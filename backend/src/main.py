@@ -33,11 +33,11 @@ app = FastAPI(
 
 @app.exception_handler(RAGError)
 async def rag_error_handler(request: Request, exc: RAGError) -> JSONResponse:
-    """Handle custom RAG errors."""
+    """Translate any RAGError into the HTTP response its subclass declares."""
     logger.error(f"RAG Error on {request.url}: {exc}")
     return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "error_type": exc.__class__.__name__},
+        status_code=exc.status_code,
+        content={"detail": exc.http_detail(), "error_type": exc.__class__.__name__},
     )
 
 

@@ -3,9 +3,14 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.api.dependencies import get_embedder, get_vector_db, get_vram_scheduler
+from src.api.dependencies import (
+    get_embedder,
+    get_llama_client,
+    get_vector_db,
+    get_vram_scheduler,
+)
 from src.core.exceptions import ModelWarmupTimeoutError
 from src.core.settings import settings
 from src.main import app
@@ -215,6 +220,114 @@ def test_ingest_status_unknown_task_returns_404(client: Any) -> None:
     """Verifies that checking an unknown task_id returns 404."""
     response = client.get("/ingest/does-not-exist")
     assert response.status_code == 404
+
+
+def test_search_failure_returns_500_via_global_ragerror_handler(client: Any) -> None:
+    """A VectorDB failure in the service layer surfaces as a typed 500, not a crash."""
+    stub_embedder = MagicMock()
+    stub_embedder.generate.return_value = [
+        {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
+    ]
+    stub_db = MagicMock()
+    stub_db.client.query_points.side_effect = RuntimeError("qdrant unreachable")
+
+    app.dependency_overrides[get_embedder] = lambda: stub_embedder
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    try:
+        response = client.post("/search", json={"query": "hello", "limit": 5})
+    finally:
+        app.dependency_overrides.pop(get_embedder, None)
+        app.dependency_overrides.pop(get_vector_db, None)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error_type"] == "VectorDBError"
+    assert "qdrant unreachable" in body["detail"]
+
+
+class _GenerationNoOpScheduler(NoOpVRAMScheduler):
+    """Scheduler stand-in whose generation slot skips the container/GPU lock."""
+
+    @asynccontextmanager
+    async def schedule_generation(self) -> AsyncGenerator[None, None]:
+        """Yield immediately without touching Docker or a real GPU lock."""
+        yield
+
+
+def test_chat_returns_200_with_generated_response(client: Any) -> None:
+    """The full retrieve-then-generate chat path returns a grounded response."""
+    stub_embedder = MagicMock()
+    stub_embedder.generate.return_value = [
+        {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
+    ]
+    stub_point = MagicMock()
+    stub_point.payload = {
+        "text": "the sky is blue",
+        "metadata": {
+            "source": "sky.pdf",
+            "page": 1,
+            "doc_id": "doc-1",
+            "page_count": 1,
+            "ingested_at": "2026-01-01T00:00:00+00:00",
+        },
+    }
+    stub_point.score = 0.9
+    stub_db = MagicMock()
+    stub_db.client.query_points.return_value = MagicMock(points=[stub_point])
+
+    stub_llama_client = MagicMock()
+    stub_llama_client.completion = AsyncMock(
+        return_value={"content": "It's blue.", "timings": {"predicted_ms": 42.0}}
+    )
+
+    app.dependency_overrides[get_embedder] = lambda: stub_embedder
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    app.dependency_overrides[get_llama_client] = lambda: stub_llama_client
+    app.dependency_overrides[get_vram_scheduler] = _GenerationNoOpScheduler
+    try:
+        response = client.post("/chat", json={"message": "What color is the sky?"})
+    finally:
+        app.dependency_overrides.pop(get_embedder, None)
+        app.dependency_overrides.pop(get_vector_db, None)
+        app.dependency_overrides.pop(get_llama_client, None)
+        app.dependency_overrides[get_vram_scheduler] = NoOpVRAMScheduler
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["response"] == "It's blue."
+    assert body["context_chunks_used"] == 1
+    assert body["total_duration_ms"] == 42.0
+
+
+def test_delete_document_returns_200_and_deleted_chunk_count(client: Any) -> None:
+    """Deleting a known doc_id removes its chunks and reports how many."""
+    points = [
+        MagicMock(
+            payload={
+                "text": "a",
+                "metadata": {
+                    "source": "report.pdf",
+                    "page": 1,
+                    "doc_id": "doc-1",
+                    "page_count": 1,
+                    "ingested_at": "2026-01-01T00:00:00+00:00",
+                },
+            }
+        )
+    ]
+    stub_db = MagicMock()
+    stub_db.client.collection_exists.return_value = True
+    stub_db.client.scroll.return_value = (points, None)
+
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    try:
+        response = client.delete("/documents/doc-1")
+    finally:
+        app.dependency_overrides.pop(get_vector_db, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"doc_id": "doc-1", "deleted_chunks": 1}
+    stub_db.delete_points.assert_called_once()
 
 
 def test_ingest_creates_queued_task_status(client: Any) -> None:

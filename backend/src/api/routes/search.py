@@ -1,6 +1,6 @@
 """Search endpoint."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from src.api.dependencies import EmbedderDep, VectorDBDep, VRAMSchedulerDep
 from src.schemas.search import SearchRequest, SearchResponse
@@ -17,7 +17,4 @@ async def search_endpoint(
     vram_scheduler: VRAMSchedulerDep,
 ) -> list[SearchResponse]:
     """Do a hybrid search (Dense + Sparse) using RRF."""
-    try:
-        return await perform_hybrid_search(request, embedder, db, vram_scheduler)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return await perform_hybrid_search(request, embedder, db, vram_scheduler)

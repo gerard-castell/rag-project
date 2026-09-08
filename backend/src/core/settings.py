@@ -51,9 +51,6 @@ class Settings(BaseSettings):
 
     # Search Configuration
     default_search_limit: int = 5
-
-    # Candidates retrieved before reranking.
-    retrieval_limit: int = 15
     prefetch_multiplier: int = 2
 
     model_config = SettingsConfigDict(

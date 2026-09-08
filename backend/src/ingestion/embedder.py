@@ -71,7 +71,7 @@ class LocalEmbedder:
             model_name=settings.sparse_model_name,
             providers=self.sparse_providers,
             cache_dir=str(settings.models_cache_dir),
-            threads=None,
+            threads=settings.sparse_model_threads,
         )
 
     def unload(self) -> None:
