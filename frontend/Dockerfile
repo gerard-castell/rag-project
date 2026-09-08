@@ -4,13 +4,13 @@ FROM node:24-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY frontend/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source
-COPY frontend .
+COPY . .
 
 # next.config.ts resolves BACKEND_URL for rewrites() at build time, since
 # Next.js bakes the rewrite destination into routes-manifest.json — a

@@ -77,8 +77,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile
       args:
         - BACKEND_URL=http://api:8000
     container_name: rag-frontend
@@ -94,8 +94,8 @@ services:
   # Runs standalone (no depends_on) so it can be started without the backend stack.
   frontend-dev:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend.dev
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     container_name: rag-frontend-dev
     ports:
       - "3000:3000"
