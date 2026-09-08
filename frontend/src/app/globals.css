@@ -13,23 +13,24 @@
   /* Papyr ink (text) */
   --color-ink: oklch(18% 0.02 260);
   --color-ink-muted: oklch(52% 0.022 260);
-  --color-ink-subtle: oklch(68% 0.018 260);
+  /* 54%, not 68%, so small ink-subtle text clears WCAG AA (4.5:1) on bg/surface */
+  --color-ink-subtle: oklch(54% 0.018 260);
 
-  /* Papyr amber */
-  --color-amber: oklch(68% 0.18 68);
-  --color-amber-dark: oklch(56% 0.20 62);
+  /* Papyr amber — L tuned so amber/white and amber-dark/amber-soft clear WCAG AA (4.5:1) */
+  --color-amber: oklch(56% 0.19 66);
+  --color-amber-dark: oklch(46% 0.19 64);
   --color-amber-soft: oklch(95% 0.06 78);
 
   /* Borders (using "rim" prefix to avoid Tailwind class conflicts) */
   --color-rim: oklch(88% 0.014 78);
   --color-rim-strong: oklch(75% 0.020 78);
 
-  /* Semantic */
-  --color-success: oklch(58% 0.16 155);
+  /* Semantic — L tuned so text-* on *-soft backgrounds clears WCAG AA (4.5:1) */
+  --color-success: oklch(48% 0.16 155);
   --color-success-soft: oklch(94% 0.06 155);
   --color-warning: oklch(72% 0.18 88);
   --color-warning-soft: oklch(95% 0.06 88);
-  --color-danger: oklch(58% 0.22 25);
+  --color-danger: oklch(50% 0.22 25);
   --color-danger-soft: oklch(95% 0.06 25);
 
   /* Fonts */

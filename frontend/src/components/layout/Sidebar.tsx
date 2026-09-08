@@ -1,4 +1,4 @@
-import { FileText, Search, MessageSquare, type LucideIcon } from "lucide-react";
+import { FileText, Search, MessageSquare, X, type LucideIcon } from "lucide-react";
 import { useDocuments } from "@/contexts/documents-context";
 import { useHealth } from "@/contexts/health-context";
 
@@ -7,6 +7,8 @@ type ActiveView = "documents" | "search" | "chat";
 interface SidebarProps {
   activeView: ActiveView;
   onNavigate: (view: ActiveView) => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }
 
 const navItems: { id: ActiveView; icon: LucideIcon; label: string }[] = [
@@ -15,11 +17,16 @@ const navItems: { id: ActiveView; icon: LucideIcon; label: string }[] = [
   { id: "chat", icon: MessageSquare, label: "Chat" },
 ];
 
-export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
+export default function Sidebar({
+  activeView,
+  onNavigate,
+  mobileOpen,
+  onMobileClose,
+}: SidebarProps) {
   const { docs, selectDoc } = useDocuments();
   const healthOk = useHealth();
 
-  return (
+  const panel = (
     <div className="flex flex-col h-full w-60 bg-surface border-r border-rim">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 h-16 border-b border-rim">
@@ -29,6 +36,13 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
         <div className="font-serif font-bold text-lg text-ink tracking-tight">
           Papyr
         </div>
+        <button
+          onClick={onMobileClose}
+          aria-label="Close navigation"
+          className="ml-auto md:hidden p-1.5 rounded-lg hover:bg-bg-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-amber"
+        >
+          <X className="w-4 h-4 text-ink-muted" />
+        </button>
       </div>
 
       {/* Nav items */}
@@ -38,7 +52,10 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
           return (
             <button
               key={id}
-              onClick={() => onNavigate(id)}
+              onClick={() => {
+                onNavigate(id);
+                onMobileClose();
+              }}
               aria-current={active ? "page" : undefined}
               className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber ${
                 active
@@ -69,6 +86,7 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
                 onClick={() => {
                   selectDoc(doc.doc_id);
                   onNavigate("documents");
+                  onMobileClose();
                 }}
                 title={doc.source}
                 className="w-full flex items-center px-2 py-1.5 text-xs text-ink-muted truncate hover:text-ink hover:bg-bg-subtle rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber"
@@ -93,5 +111,26 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: persistent sidebar */}
+      <div className="hidden md:block h-full">{panel}</div>
+
+      {/* Mobile: overlay drawer */}
+      {mobileOpen && (
+        <div className="md:hidden">
+          <div
+            className="fixed inset-0 z-40 bg-ink/40"
+            onClick={onMobileClose}
+            aria-hidden="true"
+          />
+          <div className="fixed inset-y-0 left-0 z-50 animate-scale-in" role="dialog" aria-modal="true" aria-label="Navigation">
+            {panel}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

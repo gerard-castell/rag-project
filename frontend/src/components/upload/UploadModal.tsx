@@ -41,6 +41,7 @@ export default function UploadModal() {
   const [rejectedCount, setRejectedCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -57,7 +58,27 @@ export default function UploadModal() {
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -190,7 +211,10 @@ export default function UploadModal() {
         aria-modal="true"
         aria-labelledby="upload-modal-title"
       >
-        <div className="bg-surface rounded-2xl shadow-[var(--shadow-raised)] w-full max-w-md p-7 animate-scale-in">
+        <div
+          ref={dialogRef}
+          className="bg-surface rounded-2xl shadow-[var(--shadow-raised)] w-full max-w-md p-7 animate-scale-in"
+        >
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <h2 id="upload-modal-title" className="text-lg font-serif font-bold text-ink">

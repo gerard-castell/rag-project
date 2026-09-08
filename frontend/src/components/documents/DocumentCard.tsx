@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FileText, X } from "lucide-react";
 import type { Doc } from "@/types/document";
 
@@ -15,6 +16,7 @@ export default function DocumentCard({
   onDelete,
 }: DocumentCardProps) {
   const uploadedAt = new Date(doc.ingested_at);
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <div
@@ -30,17 +32,42 @@ export default function DocumentCard({
           : "border-rim shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)]"
       }`}
     >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        title="Delete document"
-        aria-label={`Delete ${doc.source}`}
-        className="absolute top-2 right-2 z-10 p-1 rounded bg-surface border border-rim opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-danger-soft hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-amber transition-opacity"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
+      {confirming ? (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-2 right-2 z-10 flex items-center gap-1 rounded-md bg-surface border border-rim p-1 shadow-[var(--shadow-card)] animate-scale-in"
+        >
+          <button
+            onClick={() => {
+              setConfirming(false);
+              onDelete();
+            }}
+            aria-label={`Confirm delete ${doc.source}`}
+            className="px-1.5 py-0.5 rounded text-xs font-medium text-white bg-danger hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber"
+          >
+            Delete
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            aria-label="Cancel delete"
+            className="p-1 rounded hover:bg-bg-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-amber"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirming(true);
+          }}
+          title="Delete document"
+          aria-label={`Delete ${doc.source}`}
+          className="absolute top-2 right-2 z-10 p-1 rounded bg-surface border border-rim opacity-70 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 hover:bg-danger-soft hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-amber transition-opacity"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
 
       {/* Thumbnail: a stylized page mockup rather than a bare icon */}
       <div className="relative w-full h-24 bg-bg-subtle rounded-lg mb-3 overflow-hidden">
