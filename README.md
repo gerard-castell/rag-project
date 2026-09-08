@@ -173,30 +173,28 @@ once that work lands.
 
 ## Release process
 
-Releases follow [Semantic Versioning](https://semver.org/) tags (`vMAJOR.MINOR.PATCH`),
-starting at `v0.1.0`. Changes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) (
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format).
+Releases are cut automatically by [`.github/workflows/release.yml`](./.github/workflows/release.yml)
+on every push to `main` — there's no `CHANGELOG.md` to maintain by hand; the full
+history lives in the repo's [Tags](../../tags) and [Releases](../../releases) pages.
 
-- **Patch** (`v0.1.1`) — bug fixes, dependency bumps, docs, CI/tooling changes; no
-  user-visible behavior change.
-- **Minor** (`v0.2.0`) — a phase completes (see the `phase-*` labels and milestones on
-  the issue tracker) or new user-facing functionality lands.
-- **Major** (`v1.0.0`) — reserved for the first stable, feature-complete release, or a
-  breaking API/config change thereafter.
+Each merge to `main` is a single squash commit whose subject is the PR title, enforced
+as a [Conventional Commit](https://www.conventionalcommits.org/) by
+[`pr-title.yml`](./.github/workflows/pr-title.yml). The release workflow inspects every
+commit subject since the last `vX.Y.Z` tag and picks the highest applicable bump:
 
-Since this project is pre-1.0, minor bumps may still include breaking changes — check
-the changelog entry for the version you're upgrading to.
+- **`feat: ...`** → minor (`v0.1.0` → `v0.2.0`)
+- **`fix: ...`** → patch (`v0.1.0` → `v0.1.1`)
+- **`type!: ...`** (a `!` before the colon, on any commit type) → major
+  (`v0.1.0` → `v1.0.0`)
+- Anything else (`docs:`, `chore:`, `refactor:`, `perf:`, `test:`, `ci:`, `build:`) with
+  no accompanying `feat`/`fix`/`!` commit in the range → no release.
 
-To cut a release:
-
-1. Group the issues going into the release under a GitHub Milestone (or the
-   corresponding `phase-*` label).
-2. Move the `[Unreleased]` section of `CHANGELOG.md` into a new dated `[X.Y.Z]`
-   section, written in human terms (what shipped, not a commit dump), and add the
-   comparison link at the bottom of the file.
-3. Tag `main` and push the tag: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-4. Cut a GitHub Release from that tag (`gh release create vX.Y.Z --notes-from-tag` or
-   via the UI), using the matching `CHANGELOG.md` section as the release notes.
+If no `vX.Y.Z` tag exists yet, the workflow seeds the `v0.1.0` baseline instead of
+computing a bump. When a release is warranted, it tags that commit, then publishes a
+GitHub Release combining a commit-type summary (Breaking Changes / Features / Bug
+Fixes) with GitHub's auto-generated PR list — see
+[`.github/scripts/compute_release.py`](./.github/scripts/compute_release.py) for the
+exact logic.
 
 ## Development
 
