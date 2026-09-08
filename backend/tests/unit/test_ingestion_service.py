@@ -101,3 +101,21 @@ def test_run_ingestion_logic_marks_task_failed_when_no_text_extracted() -> None:
     assert record.status == TaskStatus.FAILED
     assert record.error == "No text could be extracted from the document."
     embedder.generate.assert_not_called()
+
+
+def test_run_ingestion_logic_marks_task_failed_when_embedding_raises() -> None:
+    """An embedding failure mid-pipeline unloads the embedder and fails the task."""
+    doc = SimpleNamespace(text="hello world " * 50, metadata={"page": 1})
+    embedder = MagicMock()
+    embedder.generate.side_effect = RuntimeError("cuda out of memory")
+    db = MagicMock()
+
+    with _stubbed_pipeline(parsed_docs=[doc], embedder=embedder, db=db) as task_store:
+        task_store.create("task-4")
+        run_ingestion_logic("fake_path.pdf", "task-4", "fake.pdf")
+
+    record = task_store.get("task-4")
+    assert record is not None
+    assert record.status == TaskStatus.FAILED
+    assert record.error is not None and "cuda out of memory" in record.error
+    db.upsert_points.assert_not_called()
