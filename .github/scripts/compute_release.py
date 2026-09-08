@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import sys
 
 COMMIT_RE = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?:\s*(?P<subject>.+)$"
@@ -24,12 +23,14 @@ SECTION_TITLES = {
 
 
 def run(*args: str) -> str:
+    """Run a command and return its trimmed stdout."""
     return subprocess.run(
         args, check=True, capture_output=True, text=True
     ).stdout.strip()
 
 
 def last_tag() -> str | None:
+    """Return the highest existing `vX.Y.Z` tag, or None if there isn't one."""
     result = subprocess.run(
         ["git", "tag", "-l", "v*.*.*", "--sort=-v:refname"],
         check=True,
@@ -41,6 +42,7 @@ def last_tag() -> str | None:
 
 
 def commit_log(commit_range: str | None) -> list[tuple[str, str]]:
+    """Return (sha, subject) pairs for commits in `commit_range` (or all history)."""
     args = ["git", "log", "--pretty=format:%H%x01%s%x02"]
     if commit_range:
         args.insert(2, commit_range)
@@ -58,6 +60,7 @@ def commit_log(commit_range: str | None) -> list[tuple[str, str]]:
 
 
 def classify(commits: list[tuple[str, str]]) -> tuple[str, dict[str, list[str]]]:
+    """Derive the SemVer bump and per-section notes from commit subjects."""
     bump = "none"
     sections: dict[str, list[str]] = {}
     for sha, subject in commits:
@@ -83,6 +86,7 @@ def classify(commits: list[tuple[str, str]]) -> tuple[str, dict[str, list[str]]]
 
 
 def bump_version(current: str, bump: str) -> str:
+    """Apply a major/minor/patch bump to a `vX.Y.Z` version string."""
     major, minor, patch = (int(part) for part in current.lstrip("v").split("."))
     if bump == "major":
         return f"v{major + 1}.0.0"
@@ -92,6 +96,7 @@ def bump_version(current: str, bump: str) -> str:
 
 
 def write_notes(path: str, sections: dict[str, list[str]]) -> None:
+    """Write grouped release notes (Breaking/Features/Fixes) to `path`."""
     lines = []
     for key in ("breaking", "feat", "fix"):
         if key in sections:
@@ -103,6 +108,7 @@ def write_notes(path: str, sections: dict[str, list[str]]) -> None:
 
 
 def main() -> None:
+    """Compute the next release version and write it to GitHub Actions outputs."""
     github_output = os.environ["GITHUB_OUTPUT"]
     notes_path = os.environ.get("NOTES_PATH", "release-notes.md")
 
@@ -136,4 +142,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
