@@ -171,6 +171,33 @@ _Not yet available._ A RAGAS-based evaluation of retrieval and answer quality is
 planned but not implemented in this repo yet — results will be added to this section
 once that work lands.
 
+## Release process
+
+Releases follow [Semantic Versioning](https://semver.org/) tags (`vMAJOR.MINOR.PATCH`),
+starting at `v0.1.0`. Changes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) (
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format).
+
+- **Patch** (`v0.1.1`) — bug fixes, dependency bumps, docs, CI/tooling changes; no
+  user-visible behavior change.
+- **Minor** (`v0.2.0`) — a phase completes (see the `phase-*` labels and milestones on
+  the issue tracker) or new user-facing functionality lands.
+- **Major** (`v1.0.0`) — reserved for the first stable, feature-complete release, or a
+  breaking API/config change thereafter.
+
+Since this project is pre-1.0, minor bumps may still include breaking changes — check
+the changelog entry for the version you're upgrading to.
+
+To cut a release:
+
+1. Group the issues going into the release under a GitHub Milestone (or the
+   corresponding `phase-*` label).
+2. Move the `[Unreleased]` section of `CHANGELOG.md` into a new dated `[X.Y.Z]`
+   section, written in human terms (what shipped, not a commit dump), and add the
+   comparison link at the bottom of the file.
+3. Tag `main` and push the tag: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+4. Cut a GitHub Release from that tag (`gh release create vX.Y.Z --notes-from-tag` or
+   via the UI), using the matching `CHANGELOG.md` section as the release notes.
+
 ## Development
 
 ```bash
