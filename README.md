@@ -1,12 +1,61 @@
 # RAG Project
 
-A self-hosted, hybrid-search RAG (Retrieval-Augmented Generation) system: upload PDFs,
-search them with dense + sparse vector retrieval, and chat over them with a locally
-served LLM — all on a single GPU.
+**A self-hosted "NotebookLM": upload your PDFs, ask questions, get grounded answers —
+running entirely on your own GPU, with nothing sent to a third-party LLM API.**
 
-Backend is FastAPI + Qdrant + fastembed. The LLM runs in a llama.cpp container. A
-`VRAMScheduler` time-shares the one available GPU between the embedding models and the
-LLM so both fit on modest hardware. Frontend is Next.js.
+[![CI](https://github.com/gerard-castell/rag-project/actions/workflows/ci.yml/badge.svg)](https://github.com/gerard-castell/rag-project/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/gerard-castell/rag-project?include_prereleases)](https://github.com/gerard-castell/rag-project/releases)
+[![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196.svg)](https://www.conventionalcommits.org)
+
+Products like NotebookLM and ChatPDF solve "chat with your documents" by sending your
+files to someone else's cloud. This project asks a narrower, harder question: **how
+much of that can one consumer GPU do by itself** — hybrid dense+sparse retrieval, local
+embeddings, and local generation — without giving up correctness or a usable UI?
+
+The interesting engineering problem turned out not to be RAG itself, it was **fitting
+it in 6GB of VRAM**: the embedding models and the LLM don't fit in memory together, so
+the system needs to time-share the GPU between them (see
+[`VRAMScheduler`](#gpu--vram-constraint-and-the-vramscheduler)) instead of just renting
+a bigger box. That constraint, and the decisions it forced, are the part of this repo
+worth reading — including [what it costs](#what-it-actually-costs-measured), measured
+rather than hand-waved.
+
+**Stack:** FastAPI + Qdrant (hybrid dense/sparse vector search) + fastembed for
+retrieval, a llama.cpp container for generation, Next.js for the UI, all orchestrated
+with Docker Compose. See [Architecture](#architecture) below.
+
+This is a staged, learning-driven build, not a one-shot dump — see
+[What this project demonstrates](#what-this-project-demonstrates) and the
+[roadmap](#roadmap) for how it got here and where it's going.
+
+## Screenshots & demo
+
+Real captures from the running stack — a 41-page PDF (NVIDIA's FY2024 Corporate
+Sustainability Report) ingested locally, then queried through hybrid retrieval and
+answered by the local llama.cpp model. No cloud LLM involved.
+
+**Ask a question, get an answer grounded in your PDFs.** The model only sees the
+retrieved chunks, so it answers from the document or not at all.
+
+![Chat: a grounded answer about NVIDIA's emissions targets, generated locally by llama.cpp](docs/screenshots/chat.png)
+
+**See the exact passages behind an answer.** Search exposes the retrieval layer
+directly — the hybrid dense+sparse results, RRF-ranked, with their source file and
+relevance score.
+
+![Search: ranked passages from the source PDF with relevance scores](docs/screenshots/search.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/documents.png" alt="Documents view listing the indexed PDFs with page and chunk counts"></td>
+<td width="50%"><img src="docs/screenshots/upload.png" alt="Upload dialog with a drag-and-drop zone accepting PDFs"></td>
+</tr>
+<tr>
+<td><b>Documents</b> — what's indexed, with page and chunk counts.</td>
+<td><b>Upload</b> — drop a PDF; parsing, chunking, and embedding run in the background.</td>
+</tr>
+</table>
 
 ## Hardware requirements
 
@@ -40,6 +89,25 @@ the detected device.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    User(["Browser"]) --> FE["Next.js frontend<br/>(port 3000)"]
+    FE -- "/api/* rewrite proxy" --> API["FastAPI backend<br/>(port 8000)"]
+    API --> Parse["LlamaParse<br/>(external API, PDF parsing)"]
+    API <--> Qdrant[("Qdrant<br/>hybrid vector store<br/>dense-bge + sparse-splade")]
+    API -- "schedule_generation()" --> LLM["llama.cpp container<br/>(port 8080)"]
+    API -. "schedule_embedding()<br/>time-shared GPU lock" .-> GPU[["VRAMScheduler"]]
+    GPU -. controls .-> LLM
+```
+
+`VRAMScheduler` is the box in the middle of that GPU path: a single `asyncio.Lock`
+means embedding generation and LLM generation never run concurrently on the one
+available GPU — see [GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler)
+for why that's necessary and how it works.
+
+<details>
+<summary>ASCII version (renders without Mermaid support)</summary>
+
 ```
 ┌────────────┐      /api/*        ┌──────────────┐
 │  Next.js   │ ─────────────────► │   FastAPI    │
@@ -62,6 +130,8 @@ the detected device.
                     └────────────────── GPU ──────────────────┘
                          time-shared by VRAMScheduler
 ```
+
+</details>
 
 - **Ingest**: `POST /ingest` sanitizes the filename to a basename (no path traversal),
   verifies the content is actually a PDF (magic bytes) and within
@@ -88,7 +158,7 @@ Requires Docker, Docker Compose, an NVIDIA GPU + drivers (see
 and a [LlamaParse API key](https://cloud.llamaindex.ai/).
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/gerard-castell/rag-project.git
 cd rag-project
 
 # 1. Download the LLM weights used by the llama.cpp container
@@ -155,6 +225,34 @@ combined footprint of the LLM (~4.6GB) plus the embedding and reranking models
 The LLM serving layer was later moved from Ollama to a llama.cpp container, but the
 same underlying constraint — one GPU, more model memory than it can hold at once —
 is why the scheduler exists.
+
+## What it actually costs (measured)
+
+Numbers from one machine — an RTX 3060 Laptop GPU (6 GB VRAM), the two-document corpus
+in the screenshots above, `top_k=5`. They're here because the time-sharing design has a
+real, quantifiable price and hiding it would misrepresent the trade-off.
+
+| Operation | Warm | Cold |
+| --- | --- | --- |
+| `POST /search` (hybrid dense+sparse, end to end) | ~8–9 s | ~60 s (first call after start) |
+| `POST /chat` (retrieval + generation, end to end) | ~18 s | + llama.cpp container start |
+| — of which llama.cpp generation alone | 0.7–4 s | — |
+| llama.cpp container start → `/health` ok | ~10 s | up to ~2 min |
+
+The headline: **generation is not the bottleneck — the VRAM lock is.** A warm chat turn
+spends only a couple of seconds generating; most of the rest goes on loading the
+embedding models into VRAM, embedding the query, then unloading them again so the LLM
+can have the card back. That per-request load/unload is exactly what
+[`VRAMScheduler`](#gpu--vram-constraint-and-the-vramscheduler) buys: it trades latency
+for never OOM-ing on a 6 GB card.
+
+The cold-start spread on the container is disk-bound — a 5 GB GGUF read from a warm OS
+page cache takes ~10 s, and from cold storage it can exceed the scheduler's 120 s
+readiness budget, which surfaces to the UI as a "model is warming up, retry shortly"
+notice rather than a hang.
+
+On a card that fits both at once, the lock would be unnecessary and most of this table
+would collapse to the generation row. That's the point of measuring it.
 
 ## Security notes
 
@@ -237,3 +335,51 @@ uv run ruff check . && uv run ruff format . && uv run mypy src/   # lint/type-ch
 
 See [`CLAUDE.md`](./CLAUDE.md) for a more detailed architecture/code-style guide aimed
 at contributors and AI coding agents.
+
+## What this project demonstrates
+
+Beyond "it's a RAG app," the parts meant to show engineering judgment, not just
+API-calling:
+
+- **A real resource constraint, designed around instead of ignored.** One GPU can't
+  hold the embedding models and the LLM at once — `VRAMScheduler` (see
+  [GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler)) makes that
+  trade-off explicit and safe (time-sharing, not a random OOM) instead of just
+  documenting "needs a bigger GPU."
+- **The trade-off is measured, not asserted.** The latency the VRAM lock costs is
+  benchmarked and published in [What it actually costs](#what-it-actually-costs-measured),
+  including the unflattering finding that generation is the cheap part.
+- **Hybrid retrieval done properly**: dense (`BAAI/bge-m3`) + sparse (SPLADE) named
+  vectors in Qdrant, fused with RRF via `Prefetch` + `FusionQuery` — not a single
+  embedding model doing all the work.
+- **Threat-modeled before going public**: filename sanitization against path
+  traversal, magic-byte validation on uploads, upload size caps, a locked-down
+  Docker-socket proxy instead of a raw `docker.sock` mount — see
+  [Security notes](#security-notes).
+- **A real release/CI discipline**: Conventional Commits enforced in CI, automated
+  SemVer tagging via semantic-release, a CPU-only fallback path so the project is
+  runnable without the author's exact hardware.
+- **Staged, not a one-shot dump.** The [roadmap](#roadmap) below is the actual build
+  order: get it working, close functional gaps, make it safe and presentable, then
+  extend it (agentic self-correction, eval-driven development, observability).
+
+## Roadmap
+
+This repo is built in phases, tracked as GitHub issues/milestones rather than a single
+upfront design doc — each phase's issues are linked below so the history is
+inspectable, not just claimed.
+
+- **Phase 0 — Stabilize.** Make the repo build, run, and test cleanly.
+  ([`phase-0-stabilize`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-0-stabilize))
+- **Phase 1 — Complete the core.** Ingestion status, document persistence, README/docs.
+  ([`phase-1-complete`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-1-complete))
+- **Phase 1.5 — Launch prep** (current). Security review, licensing, SemVer/releases,
+  CPU fallback, code refactors, and this portfolio pass.
+  ([`phase-1.5-launch-prep`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-1.5-launch-prep))
+- **Phase 2 — Roadmap.** Markdown-aware chunking, a self-correcting LangGraph agent,
+  RAGAS-based eval-driven development, streaming + semantic caching, Arize Phoenix
+  observability.
+  ([`phase-2-roadmap`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-2-roadmap))
+
+See the full [issue tracker](https://github.com/gerard-castell/rag-project/issues) and
+[milestones](https://github.com/gerard-castell/rag-project/milestones) for open work.
