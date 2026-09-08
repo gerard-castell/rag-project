@@ -33,8 +33,10 @@ LLM so both fit on modest hardware. Frontend is Next.js.
                          time-shared by VRAMScheduler
 ```
 
-- **Ingest**: `POST /ingest` saves the uploaded PDF, then a background task parses it
-  with LlamaParse, splits the text, generates dense (`BAAI/bge-m3`) and sparse
+- **Ingest**: `POST /ingest` sanitizes the filename to a basename (no path traversal),
+  verifies the content is actually a PDF (magic bytes) and within
+  `MAX_UPLOAD_SIZE_BYTES`, saves it, then a background task parses it with LlamaParse,
+  splits the text, generates dense (`BAAI/bge-m3`) and sparse
   (`prithivida/Splade_PP_en_v1`, SPLADE) embeddings locally via `fastembed` /
   `sentence-transformers`, and upserts everything into Qdrant as named vectors
   (`dense-bge`, `sparse-splade`).
@@ -121,6 +123,41 @@ combined footprint of the LLM (~4.6GB) plus the embedding and reranking models
 The LLM serving layer was later moved from Ollama to a llama.cpp container, but the
 same underlying constraint — one GPU, more model memory than it can hold at once —
 is why the scheduler exists.
+
+## Security notes
+
+**No authentication.** None of the endpoints (`/ingest`, `/search`, `/chat`,
+`/documents`, `/health`) require credentials. This is fine for local, single-user use,
+but **do not reverse-proxy or otherwise expose this API directly to the internet**
+without putting an authenticating proxy (or equivalent access control) in front of it.
+
+**No CORS policy is configured**, intentionally: the browser only ever talks to the
+Next.js frontend, which proxies `/api/*` to the backend server-side (see
+[`frontend/next.config.ts`](./frontend/next.config.ts)) — the browser never calls the
+FastAPI backend directly. If you build a client that calls the API directly from a
+browser, add an explicit `CORSMiddleware` allowlist rather than relying on this
+default.
+
+**Docker socket access.** `VRAMScheduler` needs to start/stop/inspect the
+`llama-cpp-gpu` container from inside the `api` container. Mounting
+`/var/run/docker.sock` straight into `api` would give that process root-equivalent
+control of the entire host Docker daemon (create privileged containers, mount the host
+filesystem, etc.) — too much blast radius for a service that's meant to be reachable
+by anyone who can hit `/ingest` or `/chat`. Instead, `docker-compose.yml` puts a
+[`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy) in
+front of the real socket: only the `docker-socket-proxy` container mounts
+`/var/run/docker.sock` (read-only), and it's configured to allow just
+`CONTAINERS` (inspect/list), `START`, and `STOP` — everything else (exec, images,
+build, volumes, networks, ...) is denied. `api` talks to it over
+`DOCKER_HOST=tcp://docker-socket-proxy:2375` on the internal compose network only; the
+proxy publishes no host port. `docker.from_env()` in `VRAMScheduler` picks up
+`DOCKER_HOST` automatically, so no application code changes were needed to adopt this.
+
+**Upload limits.** `/ingest` sanitizes `file.filename` to a basename before it ever
+touches the filesystem (rejects `../`-style path traversal), checks the file's magic
+bytes to confirm it's actually a PDF before queuing it for parsing, and caps upload
+size at `MAX_UPLOAD_SIZE_BYTES` (default 50MB, see `.env.example`) enforced while
+streaming the upload to disk.
 
 ## Learning roadmap
 

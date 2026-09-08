@@ -33,6 +33,22 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
+  # Scopes the api container's Docker access to exactly what VRAMScheduler needs
+  # (inspect/start/stop the llama-cpp-gpu container) instead of mounting the raw
+  # daemon socket into api, which would otherwise be root-equivalent host access.
+  # See "Security notes" in README.md.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    environment:
+      - CONTAINERS=1 # GET /containers/* (inspect, status)
+      - POST=1 # gate for POST requests; scoped further by ALLOW_*
+      - ALLOW_START=1
+      - ALLOW_STOP=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
   api:
     build: ./backend
     container_name: rag-api
@@ -42,13 +58,14 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - LLAMA_CPP_URL=http://llama-cpp:8080
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
     volumes:
       - ./models_cache:/app/models_cache
       - ./temp_uploads:/app/temp_uploads
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - qdrant
       - llama-cpp
+      - docker-socket-proxy
     deploy:
       resources:
         reservations:
