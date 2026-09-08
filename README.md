@@ -191,12 +191,6 @@ bytes to confirm it's actually a PDF before queuing it for parsing, and caps upl
 size at `MAX_UPLOAD_SIZE_BYTES` (default 50MB, see `.env.example`) enforced while
 streaming the upload to disk.
 
-## Learning roadmap
-
-[`steps.md`](./steps.md) is the running log of the sprint-by-sprint plan this project
-was built against (in Spanish), from initial ingestion/search through hybrid
-retrieval, reranking, an agentic layer, and evaluation.
-
 ## Evaluation results
 
 _Not yet available._ A RAGAS-based evaluation of retrieval and answer quality is
