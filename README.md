@@ -8,6 +8,36 @@ Backend is FastAPI + Qdrant + fastembed. The LLM runs in a llama.cpp container. 
 `VRAMScheduler` time-shares the one available GPU between the embedding models and the
 LLM so both fit on modest hardware. Frontend is Next.js.
 
+## Hardware requirements
+
+**By default this project requires an NVIDIA GPU.** `docker-compose.yml` reserves the
+GPU device for the `llama-cpp` and `api` containers (NVIDIA drivers + the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+must be installed on the host); `make up` checks for `nvidia-smi` first and fails fast
+with a pointer to the CPU path below instead of a raw Docker device error.
+
+**Minimum VRAM: ~6 GB** (an 8GB+ card gives more headroom). This is the size class the
+`VRAMScheduler` was built around: the LLM (~4.6GB resident) and the embedding models
+(~0.5–0.6GB each) don't fit in 6GB together, which is why generation and embedding are
+strictly time-shared instead of run concurrently — see
+[GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler) below for the full
+breakdown.
+
+**No NVIDIA GPU?** Run the CPU-only path instead — slower, but functional, and good
+enough for a portfolio demo:
+
+```bash
+make fetch-model
+make up-cpu
+```
+
+`make up-cpu` uses [`docker-compose.cpu.yml`](./docker-compose.cpu.yml) to drop the GPU
+device reservations and swap the `llama-cpp` image for its CPU-only build (`make
+run-cpu` is the foreground equivalent). Everything else — endpoints, ingestion, hybrid
+search — behaves the same; `LocalEmbedder` already falls back to CPU automatically
+when CUDA isn't available (`backend/src/ingestion/embedder.py`), and `/health` reports
+the detected device.
+
 ## Architecture
 
 ```
@@ -53,9 +83,9 @@ no reranking step runs today. Treat it as reserved/planned, not active.
 
 ## Quickstart
 
-Requires Docker, Docker Compose, an NVIDIA GPU + drivers (for the `llama-cpp` and
-`api` containers, both request a GPU via Compose), and a
-[LlamaParse API key](https://cloud.llamaindex.ai/).
+Requires Docker, Docker Compose, an NVIDIA GPU + drivers (see
+[Hardware requirements](#hardware-requirements) above for the CPU-only alternative),
+and a [LlamaParse API key](https://cloud.llamaindex.ai/).
 
 ```bash
 git clone <this-repo>
@@ -76,10 +106,12 @@ make up
 - Qdrant: http://localhost:6333
 - llama.cpp server: http://localhost:8080
 
-Other useful targets: `make down`, `make restart`, `make logs` / `make logs-api` /
-`make logs-frontend`, `make status`, `make clean` (also removes volumes), `make lint`,
-`make test`. For local (non-Docker) dev: `make frontend-dev`,
-`make frontend-install`, `cd backend && uv run uvicorn src.main:app --reload`.
+Other useful targets: `make up-cpu` / `make run-cpu` (CPU-only, see
+[Hardware requirements](#hardware-requirements)), `make down`, `make restart`,
+`make logs` / `make logs-api` / `make logs-frontend`, `make status`,
+`make clean` (also removes volumes), `make lint`, `make test`. For local (non-Docker)
+dev: `make frontend-dev`, `make frontend-install`,
+`cd backend && uv run uvicorn src.main:app --reload`.
 
 ## Environment variables
 
