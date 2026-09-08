@@ -197,6 +197,35 @@ _Not yet available._ A RAGAS-based evaluation of retrieval and answer quality is
 planned but not implemented in this repo yet — results will be added to this section
 once that work lands.
 
+## Release process
+
+Releases are cut automatically by [semantic-release](https://semantic-release.gitbook.io/)
+(configured in [`.releaserc.json`](./.releaserc.json), run by
+[`.github/workflows/release.yml`](./.github/workflows/release.yml)) on every push to
+`main` — there's no `CHANGELOG.md` to maintain by hand; the full history lives in the
+repo's [Tags](../../tags) and [Releases](../../releases) pages.
+
+Each merge to `main` is a single squash commit whose subject is the PR title, enforced
+as a [Conventional Commit](https://www.conventionalcommits.org/) by
+[`pr-title.yml`](./.github/workflows/pr-title.yml). semantic-release inspects every
+commit subject since the last `vX.Y.Z` tag and picks the highest applicable bump:
+
+- **`feat: ...`** → minor (`v0.1.0` → `v0.2.0`)
+- **`fix: ...`** → patch (`v0.1.0` → `v0.1.1`)
+- **`type!: ...`** (a `!` before the colon, on any commit type) → major
+  (`v0.1.0` → `v1.0.0`)
+- Anything else (`docs:`, `chore:`, `refactor:`, `perf:`, `test:`, `ci:`, `build:`) with
+  no accompanying `feat`/`fix`/`!` commit in the range → no release.
+
+When a release is warranted, semantic-release tags that commit and publishes a GitHub
+Release with auto-generated notes grouped by commit type.
+
+semantic-release always starts a project's very first release at `v1.0.0` and has no
+built-in way to pick a different starting point — so the `v0.1.0` baseline ("phase-0
+stabilized, boots and runs") is a one-time manual tag on `main`
+(`git tag -a v0.1.0 -m v0.1.0 && git push origin v0.1.0`, plus a matching GitHub
+Release). Every release after that is fully automatic.
+
 ## Development
 
 ```bash
