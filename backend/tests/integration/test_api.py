@@ -11,7 +11,7 @@ from src.api.dependencies import (
     get_vector_db,
     get_vram_scheduler,
 )
-from src.core.exceptions import ModelWarmupTimeoutError
+from src.core.exceptions import ContainerUnavailableError, ModelWarmupTimeoutError
 from src.core.settings import settings
 from src.main import app
 from tests.conftest import NoOpVRAMScheduler
@@ -214,6 +214,38 @@ def test_chat_returns_503_when_model_is_warming_up(client: Any) -> None:
 
     assert response.status_code == 503
     assert "warming up" in response.json()["detail"]
+
+
+def test_chat_returns_503_when_llama_cpp_container_missing(client: Any) -> None:
+    """A missing llama.cpp container surfaces as a 503, not a 500 crash."""
+
+    class MissingContainerScheduler(NoOpVRAMScheduler):
+        """Scheduler stand-in whose generation slot reports a missing container."""
+
+        @asynccontextmanager
+        async def schedule_generation(self) -> AsyncGenerator[None, None]:
+            raise ContainerUnavailableError("Container 'llama-cpp-gpu' does not exist.")
+            yield  # pragma: no cover - unreachable, satisfies generator typing
+
+    stub_embedder = MagicMock()
+    stub_embedder.generate.return_value = [
+        {"dense": [0.1, 0.2], "sparse_indices": [0], "sparse_values": [0.5]}
+    ]
+    stub_db = MagicMock()
+    stub_db.client.query_points.return_value = MagicMock(points=[])
+
+    app.dependency_overrides[get_embedder] = lambda: stub_embedder
+    app.dependency_overrides[get_vector_db] = lambda: stub_db
+    app.dependency_overrides[get_vram_scheduler] = MissingContainerScheduler
+    try:
+        response = client.post("/chat", json={"message": "hello"})
+    finally:
+        app.dependency_overrides.pop(get_embedder, None)
+        app.dependency_overrides.pop(get_vector_db, None)
+        app.dependency_overrides[get_vram_scheduler] = NoOpVRAMScheduler
+
+    assert response.status_code == 503
+    assert "does not exist" in response.json()["detail"]
 
 
 def test_ingest_status_unknown_task_returns_404(client: Any) -> None:

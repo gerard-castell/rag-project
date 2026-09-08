@@ -242,3 +242,117 @@ def test_schedule_embedding_sync_loads_once_around_whole_block(scheduler):
     embedder.load.assert_called_once()
     embedder.unload.assert_called_once()
     assert calls == ["inside"]
+
+
+async def test_schedule_embedding_unloads_even_when_body_raises(scheduler):
+    """A caller that raises inside the block must not leak a loaded embedder."""
+    embedder = MagicMock()
+
+    with pytest.raises(ValueError, match="boom"):
+        async with scheduler.schedule_embedding(embedder):
+            raise ValueError("boom")
+
+    embedder.load.assert_called_once()
+    embedder.unload.assert_called_once()
+    assert not scheduler._lock.locked()
+
+
+def test_schedule_embedding_sync_unloads_even_when_body_raises(scheduler):
+    """The sync facade must also unload on exception, not just on success."""
+    embedder = MagicMock()
+
+    with (
+        pytest.raises(ValueError, match="boom"),
+        scheduler.schedule_embedding_sync(embedder),
+    ):
+        raise ValueError("boom")
+
+    embedder.load.assert_called_once()
+    embedder.unload.assert_called_once()
+    assert not scheduler._lock.locked()
+
+
+async def test_schedule_generation_releases_lock_when_ensure_running_raises(scheduler):
+    """A cold-start failure must release the GPU lock, not deadlock it."""
+    with (
+        patch.object(
+            scheduler,
+            "_ensure_running",
+            side_effect=ModelWarmupTimeoutError("not ready"),
+        ),
+        pytest.raises(ModelWarmupTimeoutError),
+    ):
+        async with scheduler.schedule_generation():
+            pass  # pragma: no cover - unreachable, ensure_running raises first
+
+    assert not scheduler._lock.locked()
+
+
+async def test_lock_serializes_embedding_and_generation(mock_docker_client):
+    """Concurrent embed + generate calls never run on the GPU at the same time."""
+    docker_client, container = mock_docker_client
+    container.status = "running"
+
+    s = VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=300,
+    )
+
+    active = 0
+    max_concurrent = 0
+    embedder = MagicMock()
+
+    async def _do_embedding() -> None:
+        nonlocal active, max_concurrent
+        async with s.schedule_embedding(embedder):
+            active += 1
+            max_concurrent = max(max_concurrent, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+
+    async def _do_generation() -> None:
+        nonlocal active, max_concurrent
+        async with s.schedule_generation():
+            active += 1
+            max_concurrent = max(max_concurrent, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+
+    with (
+        patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client),
+        patch.object(s, "_wait_until_ready", new_callable=AsyncMock),
+    ):
+        await asyncio.gather(
+            _do_embedding(), _do_generation(), _do_embedding(), _do_generation()
+        )
+
+    assert max_concurrent == 1
+
+
+async def test_container_restarts_cleanly_after_idle_stop(mock_docker_client):
+    """A container stopped by the idle watcher starts again on the next request."""
+    docker_client, container = mock_docker_client
+    container.status = "running"
+
+    s = VRAMScheduler(
+        container_name="llama-cpp-gpu",
+        llama_cpp_url="http://localhost:8080",
+        idle_timeout_seconds=1,
+    )
+
+    def _stop(**_kwargs: object) -> None:
+        container.status = "exited"
+
+    container.stop.side_effect = _stop
+    s._last_used = time.monotonic() - 2  # exceeds the 1 s idle timeout
+
+    with patch("src.core.vram_scheduler.docker.from_env", return_value=docker_client):
+        await s._check_and_stop_if_idle()
+        container.stop.assert_called_once()
+
+        with patch.object(s, "_wait_until_ready", new_callable=AsyncMock):
+            async with s.schedule_generation():
+                pass
+
+    container.start.assert_called_once()
