@@ -1,4 +1,4 @@
-# RAG Project
+# Self-Hosted NotebookLM
 
 **A self-hosted "NotebookLM": upload your PDFs, ask questions, get grounded answers —
 running entirely on your own GPU, with nothing sent to a third-party LLM API.**
