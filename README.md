@@ -18,7 +18,8 @@ it in 6GB of VRAM**: the embedding models and the LLM don't fit in memory togeth
 the system needs to time-share the GPU between them (see
 [`VRAMScheduler`](#gpu--vram-constraint-and-the-vramscheduler)) instead of just renting
 a bigger box. That constraint, and the decisions it forced, are the part of this repo
-worth reading.
+worth reading — including [what it costs](#what-it-actually-costs-measured), measured
+rather than hand-waved.
 
 **Stack:** FastAPI + Qdrant (hybrid dense/sparse vector search) + fastembed for
 retrieval, a llama.cpp container for generation, Next.js for the UI, all orchestrated
@@ -30,19 +31,31 @@ This is a staged, learning-driven build, not a one-shot dump — see
 
 ## Screenshots & demo
 
-<!--
-  TODO(#28): replace with real captures once the stack is running (`make up` or
-  `make up-cpu`, frontend at http://localhost:3000). Suggested shots, saved into
-  docs/screenshots/ and referenced below:
-    1. docs/screenshots/upload.png   — drag-and-drop PDF upload + ingestion status
-    2. docs/screenshots/chat.png     — a chat turn with retrieved-source citations shown
-    3. docs/screenshots/demo.gif     — a short end-to-end loop: upload → ask → grounded answer
-  Keep images under ~1MB each (PNG, cropped to the app viewport, no browser chrome).
--->
+Real captures from the running stack — a 41-page PDF (NVIDIA's FY2024 Corporate
+Sustainability Report) ingested locally, then queried through hybrid retrieval and
+answered by the local llama.cpp model. No cloud LLM involved.
 
-| Upload & ingest | Chat with citations |
-| --- | --- |
-| _screenshot pending — see `docs/screenshots/`_ | _screenshot pending — see `docs/screenshots/`_ |
+**Ask a question, get an answer grounded in your PDFs.** The model only sees the
+retrieved chunks, so it answers from the document or not at all.
+
+![Chat: a grounded answer about NVIDIA's emissions targets, generated locally by llama.cpp](docs/screenshots/chat.png)
+
+**See the exact passages behind an answer.** Search exposes the retrieval layer
+directly — the hybrid dense+sparse results, RRF-ranked, with their source file and
+relevance score.
+
+![Search: ranked passages from the source PDF with relevance scores](docs/screenshots/search.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/documents.png" alt="Documents view listing the indexed PDFs with page and chunk counts"></td>
+<td width="50%"><img src="docs/screenshots/upload.png" alt="Upload dialog with a drag-and-drop zone accepting PDFs"></td>
+</tr>
+<tr>
+<td><b>Documents</b> — what's indexed, with page and chunk counts.</td>
+<td><b>Upload</b> — drop a PDF; parsing, chunking, and embedding run in the background.</td>
+</tr>
+</table>
 
 ## Hardware requirements
 
@@ -78,12 +91,12 @@ the detected device.
 
 ```mermaid
 flowchart LR
-    User(["Browser"]) --> FE["Next.js frontend\n(port 3000)"]
-    FE -- "/api/* rewrite proxy" --> API["FastAPI backend\n(port 8000)"]
-    API --> Parse["LlamaParse\n(external API, PDF parsing)"]
-    API <--> Qdrant[("Qdrant\nhybrid vector store\ndense-bge + sparse-splade")]
-    API -- "schedule_generation()" --> LLM["llama.cpp container\n(port 8080)"]
-    API -. "schedule_embedding()\ntime-shared GPU lock" .-> GPU[["VRAMScheduler"]]
+    User(["Browser"]) --> FE["Next.js frontend<br/>(port 3000)"]
+    FE -- "/api/* rewrite proxy" --> API["FastAPI backend<br/>(port 8000)"]
+    API --> Parse["LlamaParse<br/>(external API, PDF parsing)"]
+    API <--> Qdrant[("Qdrant<br/>hybrid vector store<br/>dense-bge + sparse-splade")]
+    API -- "schedule_generation()" --> LLM["llama.cpp container<br/>(port 8080)"]
+    API -. "schedule_embedding()<br/>time-shared GPU lock" .-> GPU[["VRAMScheduler"]]
     GPU -. controls .-> LLM
 ```
 
@@ -145,7 +158,7 @@ Requires Docker, Docker Compose, an NVIDIA GPU + drivers (see
 and a [LlamaParse API key](https://cloud.llamaindex.ai/).
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/gerard-castell/rag-project.git
 cd rag-project
 
 # 1. Download the LLM weights used by the llama.cpp container
@@ -212,6 +225,34 @@ combined footprint of the LLM (~4.6GB) plus the embedding and reranking models
 The LLM serving layer was later moved from Ollama to a llama.cpp container, but the
 same underlying constraint — one GPU, more model memory than it can hold at once —
 is why the scheduler exists.
+
+## What it actually costs (measured)
+
+Numbers from one machine — an RTX 3060 Laptop GPU (6 GB VRAM), the two-document corpus
+in the screenshots above, `top_k=5`. They're here because the time-sharing design has a
+real, quantifiable price and hiding it would misrepresent the trade-off.
+
+| Operation | Warm | Cold |
+| --- | --- | --- |
+| `POST /search` (hybrid dense+sparse, end to end) | ~8–9 s | ~60 s (first call after start) |
+| `POST /chat` (retrieval + generation, end to end) | ~18 s | + llama.cpp container start |
+| — of which llama.cpp generation alone | 0.7–4 s | — |
+| llama.cpp container start → `/health` ok | ~10 s | up to ~2 min |
+
+The headline: **generation is not the bottleneck — the VRAM lock is.** A warm chat turn
+spends only a couple of seconds generating; most of the rest goes on loading the
+embedding models into VRAM, embedding the query, then unloading them again so the LLM
+can have the card back. That per-request load/unload is exactly what
+[`VRAMScheduler`](#gpu--vram-constraint-and-the-vramscheduler) buys: it trades latency
+for never OOM-ing on a 6 GB card.
+
+The cold-start spread on the container is disk-bound — a 5 GB GGUF read from a warm OS
+page cache takes ~10 s, and from cold storage it can exceed the scheduler's 120 s
+readiness budget, which surfaces to the UI as a "model is warming up, retry shortly"
+notice rather than a hang.
+
+On a card that fits both at once, the lock would be unnecessary and most of this table
+would collapse to the generation row. That's the point of measuring it.
 
 ## Security notes
 
@@ -305,6 +346,9 @@ API-calling:
   [GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler)) makes that
   trade-off explicit and safe (time-sharing, not a random OOM) instead of just
   documenting "needs a bigger GPU."
+- **The trade-off is measured, not asserted.** The latency the VRAM lock costs is
+  benchmarked and published in [What it actually costs](#what-it-actually-costs-measured),
+  including the unflattering finding that generation is the cheap part.
 - **Hybrid retrieval done properly**: dense (`BAAI/bge-m3`) + sparse (SPLADE) named
   vectors in Qdrant, fused with RRF via `Prefetch` + `FusionQuery` — not a single
   embedding model doing all the work.

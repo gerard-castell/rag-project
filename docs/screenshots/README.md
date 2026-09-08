@@ -1,26 +1,30 @@
 # Screenshots
 
-Real captures for the top-level `README.md` "Screenshots & demo" section go here.
-Nothing in this folder is auto-generated — no headless browser was available in the
-environment that scaffolded this repo pass, so these are placeholders until captured
-manually.
+Captures used by the "Screenshots & demo" section of the root [`README.md`](../../README.md).
 
-## What to capture
+| File | Shows |
+| --- | --- |
+| `chat.png` | A chat turn: question, and an answer generated locally from retrieved chunks |
+| `search.png` | Hybrid search results with source file, page, and relevance score |
+| `documents.png` | The indexed-documents view (page and chunk counts) |
+| `upload.png` | The upload dialog's drag-and-drop zone |
 
-1. `upload.png` — the upload/ingest view mid- or post-upload, showing ingestion status.
-2. `chat.png` — a chat turn with the answer and its retrieved-source citations visible.
-3. `demo.gif` (optional) — a short end-to-end loop: drag a PDF in, ask a question, get a
-   grounded answer. Keep it under ~15s / ~5MB (tools like
-   [Peek](https://github.com/phw666/peek) or `ffmpeg` from a `.mov` work well).
+All four are real captures of the running stack against an ingested copy of NVIDIA's
+public FY2024 Corporate Sustainability Report — no mockups, no edited text.
 
-## How
+## Recapturing
 
-```bash
-make up        # or `make up-cpu` if you don't have an NVIDIA GPU
-# open http://localhost:3000, upload a PDF, ask it a question
-```
+Start the stack (`make up`, or `make up-cpu` without an NVIDIA GPU) and open
+http://localhost:3000. These were captured from the production frontend container at a
+1360x800 viewport at 2x device scale, cropped to the app viewport only (no browser
+chrome). Keep each PNG under ~1MB.
 
-Crop to the app viewport only (no browser chrome/tabs), PNG format, roughly
-1200–1600px wide, each file under ~1MB. Save into this folder using the filenames
-above, then update the table in the root `README.md`'s "Screenshots & demo" section to
-point at them instead of the "screenshot pending" placeholders.
+Warm the stack before shooting: the first `/search` after startup loads the embedding
+models (~1 min) and the first `/chat` starts the llama.cpp container, which can exceed
+the scheduler's readiness budget and render a warm-up notice instead of an answer.
+
+If you capture from `next dev` instead, set `devIndicators: false` in
+`frontend/next.config.ts` first so the dev badge stays out of the shot, and revert it
+afterwards. `next dev` also re-appends a Next.js agent-rules block to
+`frontend/AGENTS.md`; that block was removed deliberately (#67), so discard it before
+committing.
