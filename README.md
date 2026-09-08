@@ -1,12 +1,48 @@
 # RAG Project
 
-A self-hosted, hybrid-search RAG (Retrieval-Augmented Generation) system: upload PDFs,
-search them with dense + sparse vector retrieval, and chat over them with a locally
-served LLM — all on a single GPU.
+**A self-hosted "NotebookLM": upload your PDFs, ask questions, get grounded answers —
+running entirely on your own GPU, with nothing sent to a third-party LLM API.**
 
-Backend is FastAPI + Qdrant + fastembed. The LLM runs in a llama.cpp container. A
-`VRAMScheduler` time-shares the one available GPU between the embedding models and the
-LLM so both fit on modest hardware. Frontend is Next.js.
+[![CI](https://github.com/gerard-castell/rag-project/actions/workflows/ci.yml/badge.svg)](https://github.com/gerard-castell/rag-project/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/gerard-castell/rag-project?include_prereleases)](https://github.com/gerard-castell/rag-project/releases)
+[![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196.svg)](https://www.conventionalcommits.org)
+
+Products like NotebookLM and ChatPDF solve "chat with your documents" by sending your
+files to someone else's cloud. This project asks a narrower, harder question: **how
+much of that can one consumer GPU do by itself** — hybrid dense+sparse retrieval, local
+embeddings, and local generation — without giving up correctness or a usable UI?
+
+The interesting engineering problem turned out not to be RAG itself, it was **fitting
+it in 6GB of VRAM**: the embedding models and the LLM don't fit in memory together, so
+the system needs to time-share the GPU between them (see
+[`VRAMScheduler`](#gpu--vram-constraint-and-the-vramscheduler)) instead of just renting
+a bigger box. That constraint, and the decisions it forced, are the part of this repo
+worth reading.
+
+**Stack:** FastAPI + Qdrant (hybrid dense/sparse vector search) + fastembed for
+retrieval, a llama.cpp container for generation, Next.js for the UI, all orchestrated
+with Docker Compose. See [Architecture](#architecture) below.
+
+This is a staged, learning-driven build, not a one-shot dump — see
+[What this project demonstrates](#what-this-project-demonstrates) and the
+[roadmap](#roadmap) for how it got here and where it's going.
+
+## Screenshots & demo
+
+<!--
+  TODO(#28): replace with real captures once the stack is running (`make up` or
+  `make up-cpu`, frontend at http://localhost:3000). Suggested shots, saved into
+  docs/screenshots/ and referenced below:
+    1. docs/screenshots/upload.png   — drag-and-drop PDF upload + ingestion status
+    2. docs/screenshots/chat.png     — a chat turn with retrieved-source citations shown
+    3. docs/screenshots/demo.gif     — a short end-to-end loop: upload → ask → grounded answer
+  Keep images under ~1MB each (PNG, cropped to the app viewport, no browser chrome).
+-->
+
+| Upload & ingest | Chat with citations |
+| --- | --- |
+| _screenshot pending — see `docs/screenshots/`_ | _screenshot pending — see `docs/screenshots/`_ |
 
 ## Hardware requirements
 
@@ -40,6 +76,25 @@ the detected device.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    User(["Browser"]) --> FE["Next.js frontend\n(port 3000)"]
+    FE -- "/api/* rewrite proxy" --> API["FastAPI backend\n(port 8000)"]
+    API --> Parse["LlamaParse\n(external API, PDF parsing)"]
+    API <--> Qdrant[("Qdrant\nhybrid vector store\ndense-bge + sparse-splade")]
+    API -- "schedule_generation()" --> LLM["llama.cpp container\n(port 8080)"]
+    API -. "schedule_embedding()\ntime-shared GPU lock" .-> GPU[["VRAMScheduler"]]
+    GPU -. controls .-> LLM
+```
+
+`VRAMScheduler` is the box in the middle of that GPU path: a single `asyncio.Lock`
+means embedding generation and LLM generation never run concurrently on the one
+available GPU — see [GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler)
+for why that's necessary and how it works.
+
+<details>
+<summary>ASCII version (renders without Mermaid support)</summary>
+
 ```
 ┌────────────┐      /api/*        ┌──────────────┐
 │  Next.js   │ ─────────────────► │   FastAPI    │
@@ -62,6 +117,8 @@ the detected device.
                     └────────────────── GPU ──────────────────┘
                          time-shared by VRAMScheduler
 ```
+
+</details>
 
 - **Ingest**: `POST /ingest` sanitizes the filename to a basename (no path traversal),
   verifies the content is actually a PDF (magic bytes) and within
@@ -237,3 +294,48 @@ uv run ruff check . && uv run ruff format . && uv run mypy src/   # lint/type-ch
 
 See [`CLAUDE.md`](./CLAUDE.md) for a more detailed architecture/code-style guide aimed
 at contributors and AI coding agents.
+
+## What this project demonstrates
+
+Beyond "it's a RAG app," the parts meant to show engineering judgment, not just
+API-calling:
+
+- **A real resource constraint, designed around instead of ignored.** One GPU can't
+  hold the embedding models and the LLM at once — `VRAMScheduler` (see
+  [GPU / VRAM constraint](#gpu--vram-constraint-and-the-vramscheduler)) makes that
+  trade-off explicit and safe (time-sharing, not a random OOM) instead of just
+  documenting "needs a bigger GPU."
+- **Hybrid retrieval done properly**: dense (`BAAI/bge-m3`) + sparse (SPLADE) named
+  vectors in Qdrant, fused with RRF via `Prefetch` + `FusionQuery` — not a single
+  embedding model doing all the work.
+- **Threat-modeled before going public**: filename sanitization against path
+  traversal, magic-byte validation on uploads, upload size caps, a locked-down
+  Docker-socket proxy instead of a raw `docker.sock` mount — see
+  [Security notes](#security-notes).
+- **A real release/CI discipline**: Conventional Commits enforced in CI, automated
+  SemVer tagging via semantic-release, a CPU-only fallback path so the project is
+  runnable without the author's exact hardware.
+- **Staged, not a one-shot dump.** The [roadmap](#roadmap) below is the actual build
+  order: get it working, close functional gaps, make it safe and presentable, then
+  extend it (agentic self-correction, eval-driven development, observability).
+
+## Roadmap
+
+This repo is built in phases, tracked as GitHub issues/milestones rather than a single
+upfront design doc — each phase's issues are linked below so the history is
+inspectable, not just claimed.
+
+- **Phase 0 — Stabilize.** Make the repo build, run, and test cleanly.
+  ([`phase-0-stabilize`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-0-stabilize))
+- **Phase 1 — Complete the core.** Ingestion status, document persistence, README/docs.
+  ([`phase-1-complete`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-1-complete))
+- **Phase 1.5 — Launch prep** (current). Security review, licensing, SemVer/releases,
+  CPU fallback, code refactors, and this portfolio pass.
+  ([`phase-1.5-launch-prep`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-1.5-launch-prep))
+- **Phase 2 — Roadmap.** Markdown-aware chunking, a self-correcting LangGraph agent,
+  RAGAS-based eval-driven development, streaming + semantic caching, Arize Phoenix
+  observability.
+  ([`phase-2-roadmap`](https://github.com/gerard-castell/rag-project/issues?q=label%3Aphase-2-roadmap))
+
+See the full [issue tracker](https://github.com/gerard-castell/rag-project/issues) and
+[milestones](https://github.com/gerard-castell/rag-project/milestones) for open work.
