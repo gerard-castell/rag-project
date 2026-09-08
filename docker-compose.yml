@@ -97,6 +97,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: rag-frontend-dev
+    # Opt-in: binds the same port as `frontend`, so both can't run at once.
+    profiles: ["dev"]
     ports:
       - "3000:3000"
     environment:

@@ -1,5 +1,7 @@
 # Multi-stage build for Next.js frontend
-FROM node:24-alpine AS builder
+# Pinned to node 22: on node 24, `next build` fails deserializing next.config.ts
+# with "Missing field `turbopackMemoryEviction`".
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -22,7 +24,7 @@ ENV BACKEND_URL=$BACKEND_URL
 RUN npm run build
 
 # Production stage
-FROM node:24-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
