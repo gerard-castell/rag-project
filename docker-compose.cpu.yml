@@ -1,0 +1,23 @@
+# CPU-only override — no NVIDIA GPU required.
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d --build
+# (or `make up-cpu`)
+#
+# Drops the GPU device reservations from `llama-cpp` and `api`, and swaps the
+# `llama-cpp` image for its CPU-only build. Functional but slow (no GPU offload) —
+# good enough for a portfolio demo, not production throughput. See "Hardware
+# requirements" in README.md.
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full
+    command: ["--server", "-m", "/models/gemma-4-E4B-it-Q4_K_M.gguf", "--host", "0.0.0.0", "--port", "8080", "--ctx-size", "4096"]
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []
+
+  api:
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []

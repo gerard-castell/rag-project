@@ -5,7 +5,8 @@ Guidance for AI coding agents working in this repo.
 
 ```bash
 make fetch-model              # download the llama.cpp GGUF model into models/
-make up                       # docker compose up -d --build (qdrant, llama-cpp, api, frontend)
+make up                       # docker compose up -d --build (qdrant, llama-cpp, api, frontend); requires an NVIDIA GPU
+make up-cpu                   # same, CPU-only (no GPU required, slower) — see docker-compose.cpu.yml
 make down                     # docker compose down
 make logs / logs-api / logs-frontend
 cd backend && uv run python -m src.main
